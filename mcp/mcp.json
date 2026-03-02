@@ -1,0 +1,63 @@
+{
+  "mcpServers": {
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
+    },
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/eliahkadu/Desktop/_follower_"
+      ]
+    },
+    "neo4j": {
+      "type": "stdio",
+      "command": "/Users/eliahkadu/Desktop/_follower_/mcp/with-env.sh",
+      "args": [
+        "uvx",
+        "mcp-neo4j-cypher",
+        "--transport",
+        "stdio"
+      ]
+    },
+    "qdrant": {
+      "type": "stdio",
+      "command": "/Users/eliahkadu/Desktop/_follower_/mcp/with-env.sh",
+      "args": [
+        "uvx",
+        "--python",
+        "3.13",
+        "mcp-server-qdrant"
+      ],
+      "env": {
+        "COLLECTION_NAME": "workflow_memory",
+        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+      }
+    },
+    "github": {
+      "type": "stdio",
+      "command": "/Users/eliahkadu/Desktop/_follower_/mcp/with-env.sh",
+      "args": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ]
+    },
+    "semgrep": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--python",
+        "3.13",
+        "semgrep-mcp"
+      ]
+    }
+  }
+}

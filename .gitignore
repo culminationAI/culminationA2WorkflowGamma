@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+infra/qdrant_storage/
+infra/neo4j_data/
+infra/neo4j_backups/
+secrets/.env
+.mcp.json
+.claude/agent-memory/
+onboardinglogs/
+research/
+*.log
+.DS_Store

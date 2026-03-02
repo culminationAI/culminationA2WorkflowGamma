@@ -1,0 +1,79 @@
+{
+  "mcpServers": {
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
+    },
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "__WORKSPACE_ROOT__"
+      ]
+    },
+    "neo4j": {
+      "type": "stdio",
+      "command": "__WORKSPACE_ROOT__/mcp/with-env.sh",
+      "args": [
+        "uvx",
+        "mcp-neo4j-cypher",
+        "--transport",
+        "stdio"
+      ]
+    },
+    "qdrant": {
+      "type": "stdio",
+      "command": "__WORKSPACE_ROOT__/mcp/with-env.sh",
+      "args": [
+        "uvx",
+        "--python",
+        "3.13",
+        "mcp-server-qdrant"
+      ],
+      "env": {
+        "COLLECTION_NAME": "workflow_memory",
+        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+      }
+    },
+    "github": {
+      "type": "stdio",
+      "command": "__WORKSPACE_ROOT__/mcp/with-env.sh",
+      "args": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ]
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ]
+    },
+    "semgrep": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--python",
+        "3.13",
+        "semgrep-mcp"
+      ]
+    },
+    "youtube-transcript": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@kimtaeyoon83/mcp-server-youtube-transcript"
+      ]
+    }
+  }
+}
