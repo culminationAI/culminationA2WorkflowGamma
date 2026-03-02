@@ -1,4 +1,4 @@
-<!-- WORKFLOW_VERSION: 1.0 -->
+<!-- WORKFLOW_VERSION: 1.01 -->
 
 # CLAUDE.md — Main Workspace
 
@@ -64,6 +64,7 @@ project-root/               <- you are here (workspace root)
 4. Read active plans if working on a specific project
 5. Lightweight gap analysis: check `docs/self-architecture/capability-map.md` freshness + `docs/self-architecture/build-registry.json` build TTLs (see `protocols/core/gap-analysis.md`)
 6. If active build TTL expiring within 2 days/sessions → warn user
+7. Check exchange: `curl -s 'http://localhost:8888/messages?to=falkvelt&status=pending' | python3 -c "import sys,json; msgs=json.load(sys.stdin); print(f'{len(msgs)} pending messages') if msgs else print('No messages')"`
 
 ## Subagents (Working Workflow)
 
@@ -199,6 +200,7 @@ Then Read the protocol file and inject relevant section into subagent prompt.
 | Cloning | Build-up pipeline | `protocols/quality/cloning.md` |
 | Security Logging | Suspicious input, validation failure | `protocols/quality/security-logging.md` |
 | Monorepo Orchestration | Monorepo archetype detected | `protocols/project/monorepo-orchestration.md` |
+| Inter-Agent Exchange | Multi-workspace messaging, session start | `protocols/agents/inter-agent-exchange.md` |
 
 **Build-up rule**: After EVERY user correction → MUST store via `protocols/core/build-up.md`.
 
@@ -220,3 +222,27 @@ Status: `python3 mcp/mcp_configure.py --status`
 | youtube-transcript | Extract transcripts for research | Process videos without user request |
 
 Protocol: `protocols/core/mcp-management.md`
+
+## Inter-Agent Exchange
+
+Communication hub for multi-workspace coordination (OkiAra ↔ FalkVelt).
+
+- **URL:** http://localhost:8888
+- **UI:** http://localhost:8888 (browser)
+- **Container:** workflow-exchange
+- **Protocol:** `protocols/agents/inter-agent-exchange.md`
+
+```bash
+# Send message
+curl -s -X POST 'http://localhost:8888/messages' \
+  -H 'Content-Type: application/json' \
+  -d '{"from_agent":"falkvelt","to_agent":"okiara","type":"task","subject":"...","body":"..."}'
+
+# Check inbox
+curl -s 'http://localhost:8888/messages?to=falkvelt&status=pending'
+
+# Mark as read
+curl -s -X PATCH 'http://localhost:8888/messages/{id}' \
+  -H 'Content-Type: application/json' \
+  -d '{"status":"read"}'
+```
