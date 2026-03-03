@@ -77,6 +77,8 @@ Quick summary:
 | Meta (Protocol Lifecycle) | Protocol CRUD, auto-creation | `agents/meta.md` |
 | Inter-Agent Exchange | Multi-workspace messaging hub | `agents/inter-agent-exchange.md` |
 | Knowledge Sharing | Push-based knowledge sharing between coordinators | `agents/knowledge-sharing.md` |
+| Protocol Exchange | Propose, review, and adopt protocols across workspaces | `agents/protocol-exchange.md` |
+| Shared Repo Sync | Sync shared infrastructure repos and notify agents | `agents/shared-repo-sync.md` |
 
 ## Quality Protocols
 

@@ -1,1 +1,117 @@
-{"version": "1.0", "specs": [], "last_updated": "2026-03-03T02:00:00Z"}
+{
+  "version": "1.0",
+  "last_updated": "2026-03-03T03:30:00Z",
+  "max_standalone_specs": 3,
+  "specs": [
+    {
+      "id": "spec-exchange-responder",
+      "type": "AGENT",
+      "domain": "exchange",
+      "description": "Live exchange responder — watcher daemon with dual SSE/polling transport and claude -p auto-response delegation",
+      "definition": {
+        "files": [
+          {"path": "infra/responder/watcher.py", "action": "create"},
+          {"path": "protocols/agents/inter-agent-exchange.md", "action": "create"}
+        ],
+        "capabilities": [
+          "auto-respond to exchange messages",
+          "SSE streaming",
+          "message routing",
+          "claude -p delegation"
+        ]
+      },
+      "state": "IN_USE",
+      "created_at": "2026-03-03T03:30:00Z",
+      "commit": "c3c2b85",
+      "used_by_builds": ["build-2026-03-03-session1"]
+    },
+    {
+      "id": "spec-heartbeat-payload",
+      "type": "AGENT",
+      "domain": "exchange",
+      "description": "Heartbeat daemon thread and structured payload parser supporting ping/pong and status_request message types",
+      "definition": {
+        "files": [
+          {"path": "infra/responder/watcher.py", "action": "modify"}
+        ],
+        "capabilities": [
+          "presence heartbeat",
+          "payload parsing",
+          "status reporting",
+          "ping-pong protocol"
+        ]
+      },
+      "state": "IN_USE",
+      "created_at": "2026-03-03T03:30:00Z",
+      "commit": "21fb800",
+      "used_by_builds": ["build-2026-03-03-session1"]
+    },
+    {
+      "id": "spec-evolution-protocol",
+      "type": "PROTOCOL",
+      "domain": "evolution",
+      "description": "Evolution orchestration layer with 6 hooks: Correction Interceptor (BLOCKING), Session-End Review (MANDATORY), Adaptive Orchestrator, Predictive Loop, Post-Task Verification, Knowledge Export",
+      "definition": {
+        "files": [
+          {"path": "protocols/core/evolution.md", "action": "create"},
+          {"path": "CLAUDE.md", "action": "modify"}
+        ],
+        "capabilities": [
+          "correction enforcement",
+          "session review",
+          "adaptive build selection",
+          "predictive analysis",
+          "knowledge export"
+        ]
+      },
+      "state": "IN_USE",
+      "created_at": "2026-03-03T03:30:00Z",
+      "commit": "3717cd0",
+      "used_by_builds": ["build-2026-03-03-session1"]
+    },
+    {
+      "id": "spec-capability-map",
+      "type": "PROTOCOL",
+      "domain": "self-architecture",
+      "description": "Self-architecture capability map v1.05 — full inventory of agents, protocols, MCP servers, memory subsystem, Neo4j graph, and cross-references",
+      "definition": {
+        "files": [
+          {"path": "docs/self-architecture/capability-map.md", "action": "modify"}
+        ],
+        "capabilities": [
+          "self-awareness",
+          "cross-reference integrity",
+          "infrastructure mapping",
+          "trajectory analysis"
+        ]
+      },
+      "state": "IN_USE",
+      "created_at": "2026-03-03T03:30:00Z",
+      "commit": "fdcb9d1",
+      "used_by_builds": ["build-2026-03-03-session1"]
+    },
+    {
+      "id": "spec-knowledge-sharing",
+      "type": "PROTOCOL",
+      "domain": "knowledge",
+      "description": "Push-based inter-agent knowledge exchange — universal corrections exported as JSON digests and delivered via exchange messages for cross-agent learning",
+      "definition": {
+        "files": [
+          {"path": "protocols/agents/knowledge-sharing.md", "action": "create"},
+          {"path": "infra/responder/watcher.py", "action": "modify"}
+        ],
+        "capabilities": [
+          "knowledge export",
+          "knowledge import",
+          "digest creation",
+          "duplicate detection",
+          "cross-agent learning"
+        ]
+      },
+      "state": "IN_USE",
+      "created_at": "2026-03-03T03:30:00Z",
+      "commit": "fd0effd",
+      "used_by_builds": ["build-2026-03-03-session1"]
+    }
+  ]
+}
