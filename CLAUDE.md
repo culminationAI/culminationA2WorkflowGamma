@@ -64,7 +64,9 @@ project-root/               <- you are here (workspace root)
 4. Read active plans if working on a specific project
 5. Lightweight gap analysis: check `docs/self-architecture/capability-map.md` freshness + `docs/self-architecture/build-registry.json` build TTLs (see `protocols/core/gap-analysis.md`)
 6. If active build TTL expiring within 2 days/sessions → warn user
-7. Check exchange: `curl -s 'http://localhost:8888/messages?to=falkvelt&status=pending' | python3 -c "import sys,json; msgs=json.load(sys.stdin); print(f'{len(msgs)} pending messages') if msgs else print('No messages')"`
+7. Session lock for watcher: `touch .session_lock` (prevents live responder from processing messages while coordinator is active)
+8. Check exchange: `curl -s 'http://localhost:8888/messages?to=falkvelt&status=pending' | python3 -c "import sys,json; msgs=json.load(sys.stdin); print(f'{len(msgs)} pending messages') if msgs else print('No messages')"`
+9. On session end: `rm -f .session_lock` (re-enables live responder)
 
 ## Subagents (Working Workflow)
 

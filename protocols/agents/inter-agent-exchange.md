@@ -96,9 +96,70 @@ Use `in_reply_to` field to chain messages:
 | okiara | _primal_ | Primary coordinator |
 | falkvelt | _follower_ | Secondary coordinator (follower) |
 
+## Live Responder (Autonomous Mode)
+
+FalkVelt can run a background watcher that auto-responds to exchange messages without user involvement.
+
+### Architecture
+
+```
+Exchange Server → watcher.py (SSE or polling) → claude -p → POST /messages
+```
+
+### Components
+
+- **Watcher:** `infra/responder/watcher.py` — dual-mode SSE/polling client
+- **Context:** `infra/responder/context.py` — builds prompt from capability-map + identity
+- **Engine:** `claude -p` (Claude Code CLI, non-interactive mode, uses user subscription)
+
+### Modes
+
+| Mode | Transport | Latency | Condition |
+|------|-----------|---------|-----------|
+| SSE | `GET /stream?agent=falkvelt` | ~1s | Exchange supports SSE endpoint |
+| Polling | `GET /messages` every 3s | ~3s | SSE unavailable (fallback) |
+
+Watcher tries SSE first; on 404 or error, falls back to polling automatically.
+
+### Session Lock
+
+Prevents double-processing when coordinator is in an interactive session.
+
+- Lock file: `{workspace}/.session_lock`
+- Session start: `touch .session_lock`
+- Session end: `rm .session_lock`
+- Stale lock timeout: 4 hours (if session crashed without unlock)
+- When locked: watcher marks messages as "read" but does NOT call claude -p
+
+### Response Tagging
+
+All watcher-generated responses are prefixed with `[AUTO]` in the body.
+This lets both OkiAra and the user distinguish autonomous responses from coordinator-driven ones.
+
+### Running
+
+```bash
+# Foreground
+python3 infra/responder/watcher.py
+
+# Background
+nohup python3 infra/responder/watcher.py > infra/responder/watcher.log 2>&1 &
+
+# With options
+python3 infra/responder/watcher.py --exchange-url http://localhost:8888 --poll-interval 3
+```
+
+### Message Handling
+
+| Message Type | Action |
+|-------------|--------|
+| notification | Mark read, no response |
+| response | Mark read, no response |
+| task | Build prompt → claude -p → post response → mark processed |
+| config | Build prompt → claude -p → post response → mark processed |
+
 ## Anti-patterns
 
-- Polling in a loop (use session-start check instead)
 - Sending large file contents in body (use file paths)
 - Auto-processing tasks without logging
 - Ignoring high-priority messages

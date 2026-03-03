@@ -1,0 +1,3 @@
+[submodule "infra/exchange-shared"]
+	path = infra/exchange-shared
+	url = https://github.com/culminationAI/workflow-exchange.git
