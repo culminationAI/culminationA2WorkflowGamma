@@ -169,8 +169,14 @@ Structured actions in the `body` field (JSON). Watcher handles these via fast-pa
 | `protocol_proposal` | task | Propose a protocol for adoption | Queue for review (claude -p) |
 | `asset_published` | notification | New asset pushed to shared knowledge repo | Store to memory as `pending_review`, mark read |
 | `asset_feedback` | response | Evaluation/feedback on a published asset | Store to memory, mark read |
+| `joint_task_request` | task | Propose joint task with decomposition | Queue for review (claude -p) |
+| `joint_task_response` | response | Accept/adapt/reject joint task proposal | Queue for review (claude -p) |
+| `progress_update` | notification | Report progress on joint task subtask | Store to memory, mark read |
+| `task_checkpoint` | task | Synchronize intermediate results | Queue for review (claude -p) |
+| `task_complete` | notification | Report joint task completion | Store to memory, mark read |
 
 See: `protocols/agents/asset-exchange.md` for `asset_published` / `asset_feedback` payload formats.
+See: `protocols/agents/joint-task-protocol.md` for `joint_task_*` / `progress_update` / `task_checkpoint` / `task_complete` payload formats.
 
 ## Anti-patterns
 

@@ -1,4 +1,4 @@
-<!-- WORKFLOW_VERSION: 1.85 -->
+<!-- WORKFLOW_VERSION: 1.95 -->
 
 # CLAUDE.md — Main Workspace
 
@@ -208,6 +208,7 @@ Then Read the protocol file and inject relevant section into subagent prompt.
 | Monorepo Orchestration | Monorepo archetype detected | `protocols/project/monorepo-orchestration.md` |
 | Inter-Agent Exchange | Multi-workspace messaging, session start | `protocols/agents/inter-agent-exchange.md` |
 | Knowledge Sharing | Build-up stored (universal), incoming knowledge message | `protocols/agents/knowledge-sharing.md` |
+| Joint Task Protocol | Joint work with another agent, `/joint-task` | `protocols/agents/joint-task-protocol.md` |
 | Asset Exchange | New spec/protocol/graph created, meditation findings, `asset_published` notification | `protocols/agents/asset-exchange.md` |
 | Knowledge Exchange Accord | Bilateral ratification, principle reference, accord amendments or withdrawal | `protocols/agents/knowledge-exchange-accord.md` |
 

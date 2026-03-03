@@ -19,7 +19,8 @@ protocols/
 │   ├── agent-communication.md ← dispatch/response format
 │   ├── meta.md            ← protocol lifecycle (meta-protocol)
 │   ├── inter-agent-exchange.md ← multi-workspace messaging hub
-│   └── knowledge-sharing.md ← push-based knowledge sharing between coordinators
+│   ├── knowledge-sharing.md ← push-based knowledge sharing between coordinators
+│   └── joint-task-protocol.md ← joint execution of tasks requiring both agents
 ├── knowledge/             ← memory, exploration, context
 │   ├── exploration.md     ← pathfinder operations
 │   ├── memory.md          ← memory layer usage rules
@@ -80,6 +81,7 @@ Quick summary:
 | Protocol Exchange | Propose, review, and adopt protocols across workspaces | `agents/protocol-exchange.md` |
 | Shared Repo Sync | Sync shared infrastructure repos and notify agents | `agents/shared-repo-sync.md` |
 | Knowledge Exchange Accord | Bilateral constitutional agreement (FalkVelt ↔ OkiAra): principles, data boundaries, conflict resolution | `agents/knowledge-exchange-accord.md` |
+| Joint Task Protocol | Joint work on a task requiring both agents, `/joint-task` | `agents/joint-task-protocol.md` |
 
 ## Quality Protocols
 
