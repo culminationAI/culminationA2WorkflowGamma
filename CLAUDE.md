@@ -1,4 +1,4 @@
-<!-- WORKFLOW_VERSION: 2.55 -->
+<!-- WORKFLOW_VERSION: 2.65 -->
 
 # CLAUDE.md — Main Workspace
 
@@ -218,6 +218,7 @@ Then Read the protocol file and inject relevant section into subagent prompt.
 | Context Engineering | Context assembly | `protocols/knowledge/context-engineering.md` |
 | Testing | Verification, benchmarks | `protocols/quality/testing.md` |
 | Cloning | Build-up pipeline | `protocols/quality/cloning.md` |
+| Yoga | End-to-end pipeline health check, `/yoga` | `protocols/quality/yoga.md` |
 | Security Logging | Suspicious input, validation failure | `protocols/quality/security-logging.md` |
 | Monorepo Orchestration | Monorepo archetype detected | `protocols/project/monorepo-orchestration.md` |
 | Inter-Agent Exchange | Multi-workspace messaging, session start | `protocols/agents/inter-agent-exchange.md` |

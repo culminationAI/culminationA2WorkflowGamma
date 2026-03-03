@@ -63,12 +63,13 @@
 | Memory | `protocols/knowledge/memory.md` | Memory read/write |
 | Context Engineering | `protocols/knowledge/context-engineering.md` | Context assembly |
 
-### quality (3 protocols)
+### quality (4 protocols)
 
 | Name | File | Trigger |
 |------|------|---------|
 | Testing | `protocols/quality/testing.md` | Verification, benchmarks |
 | Cloning | `protocols/quality/cloning.md` | Build-up pipeline |
+| Yoga | `protocols/quality/yoga.md` | End-to-end pipeline health check, `/yoga` |
 | Security Logging | `protocols/quality/security-logging.md` | Suspicious input, validation failure |
 
 ### project (1 protocol)
@@ -77,7 +78,7 @@
 |------|------|---------|
 | Monorepo Orchestration | `protocols/project/monorepo-orchestration.md` | Monorepo archetype detected |
 
-**Total:** 28 protocols across 5 categories.
+**Total:** 29 protocols across 5 categories.
 
 ---
 
