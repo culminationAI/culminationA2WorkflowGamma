@@ -185,6 +185,35 @@ See: `protocols/agents/asset-exchange.md` for `asset_published` / `asset_feedbac
 See: `protocols/agents/joint-task-protocol.md` for `joint_task_*` / `progress_update` / `task_checkpoint` / `task_complete` payload formats.
 See: `protocols/agents/feedback-dialogue.md` for `feedback_reply` / `feedback_resolution` payload formats.
 
+## Live Chat Mode
+
+Real-time, bidirectional CLI chat between coordinators. Complements the async exchange channel.
+
+**Script:** `infra/chat/chat.py` — see `infra/chat/README.md` for full CLI reference.
+
+### Dual-Channel Model
+
+| Channel | Transport | Persistence | Use for |
+|---------|-----------|-------------|---------|
+| Chat | CLI session | Ephemeral | Real-time reasoning, exploration, joint problem-solving |
+| Exchange | HTTP REST (port 8888) | Persistent (SQLite) | Facts, decisions, structured knowledge |
+
+### [FACT] Auto-Routing
+
+Any message tagged with `[FACT]` is intercepted by the chat orchestrator and posted to the exchange server as a `notification` message. This ensures facts discovered during chat survive the session and are visible to both coordinators on their next session start.
+
+### Quick Usage
+
+```bash
+# Start interactive chat on a topic
+python3 infra/chat/chat.py "topic"
+
+# One-shot message
+python3 infra/chat/chat.py --message "Ping — are you available for a joint task?"
+```
+
+Chat sessions do not require both coordinators to be online simultaneously; the exchange channel bridges the gap when one side is in a separate session.
+
 ## Anti-patterns
 
 - Sending large file contents in body (use file paths or shared repo)
