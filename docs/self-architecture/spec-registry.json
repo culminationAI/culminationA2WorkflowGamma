@@ -1,6 +1,6 @@
 {
-  "version": "2.0",
-  "last_updated": "2026-03-03T05:30:00Z",
+  "version": "2.1",
+  "last_updated": "2026-03-03T08:00:00Z",
   "max_standalone_specs": 3,
   "domain_map": {
     "exchange": {
@@ -17,7 +17,8 @@
       "pipeline": ["spec-evolution-protocol"]
     },
     "self-architecture": {
-      "mapping": ["spec-capability-map"]
+      "mapping": ["spec-capability-map"],
+      "introspection": ["spec-meditation-protocol"]
     }
   },
   "specs": [
@@ -303,6 +304,35 @@
       },
       "state": "AVAILABLE",
       "created_at": "2026-03-03T05:30:00Z",
+      "commit": null,
+      "used_by_builds": []
+    },
+    {
+      "id": "spec-meditation-protocol",
+      "type": "PROTOCOL",
+      "domain": "self-architecture",
+      "domain_path": "self-architecture/introspection",
+      "tags": ["meditation", "self-analysis", "introspection", "connection-weaving", "conflict-resolution", "universal-reach", "contemplative-ai", "predictive-processing", "stigmergy"],
+      "status": "IMPLEMENTED",
+      "depends_on": [],
+      "related_specs": ["spec-evolution-protocol", "spec-capability-map"],
+      "spec_file": null,
+      "description": "6-phase introspective self-analysis protocol with connection discovery via controlled hallucination, conflict resolution, and optional cross-agent memory access via stigmergy",
+      "definition": {
+        "files": [
+          {"path": "protocols/core/meditation.md", "action": "create"},
+          {"path": "docs/self-architecture/meditation-log.md", "action": "create"}
+        ],
+        "capabilities": [
+          "deep self-analysis",
+          "connection weaving",
+          "conflict resolution",
+          "universal reach",
+          "integrity scoring"
+        ]
+      },
+      "state": "IN_USE",
+      "created_at": "2026-03-03T08:00:00Z",
       "commit": null,
       "used_by_builds": []
     }

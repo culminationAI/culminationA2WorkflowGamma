@@ -24,7 +24,7 @@
 
 ## 2. Protocols
 
-### core (9 protocols)
+### core (10 protocols)
 
 | Name | File | Trigger |
 |------|------|---------|
@@ -37,6 +37,7 @@
 | Query Optimization | `protocols/core/query-optimization.md` | Every user request |
 | MCP Management | `protocols/core/mcp-management.md` | Profile switching, new server addition |
 | Evolution | `protocols/core/evolution.md` | User correction, session end, structural gap, post-task |
+| Meditation | `protocols/core/meditation.md` | `/meditate`, 5+ sessions without meditation, 3+ corrections |
 
 ### agents (4 protocols)
 
@@ -69,7 +70,7 @@
 |------|------|---------|
 | Monorepo Orchestration | `protocols/project/monorepo-orchestration.md` | Monorepo archetype detected |
 
-**Total:** 22 protocols across 5 categories (incl. protocol-exchange, shared-repo-sync, knowledge-sharing).
+**Total:** 23 protocols across 5 categories (incl. protocol-exchange, shared-repo-sync, knowledge-sharing).
 
 ---
 

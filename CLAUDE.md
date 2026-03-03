@@ -1,4 +1,4 @@
-<!-- WORKFLOW_VERSION: 1.55 -->
+<!-- WORKFLOW_VERSION: 1.65 -->
 
 # CLAUDE.md — Main Workspace
 
@@ -192,6 +192,7 @@ Then Read the protocol file and inject relevant section into subagent prompt.
 | Self Build-Up | Gap detection, build lifecycle | `protocols/core/self-build-up.md` |
 | Gap Analysis | Capability gap detection (session start + on demand) | `protocols/core/gap-analysis.md` |
 | Evolution | Correction capture, session-end review, adaptive build selection, predictive loop | `protocols/core/evolution.md` |
+| Meditation | Deep self-analysis, connection discovery, conflict resolution, `/meditate` | `protocols/core/meditation.md` |
 | Coordination | Parallel agent tasks | `protocols/core/coordination.md` |
 | Query Optimization | Every user request | `protocols/core/query-optimization.md` |
 | MCP Management | Profile switching, new server addition | `protocols/core/mcp-management.md` |

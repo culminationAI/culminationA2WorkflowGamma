@@ -102,6 +102,16 @@ For T3+ requests, gap analysis runs IN PARALLEL with task dispatch — never blo
 
 > When routing, check `.claude/agents/` for available domain agents beyond the base four.
 
+## Command Routing
+
+Explicit slash-command overrides. Take precedence over verb-based tier classification.
+
+| Command | Tier | Executor | Description |
+|---------|------|----------|-------------|
+| `/meditate quick` | T3 | coordinator (direct tools) | Quick meditation — coordinator-only scan |
+| `/meditate` or `/meditate deep` | T4 | pathfinder | Deep meditation — full introspection with connection weaving |
+| `/meditate full` | T5 | pathfinder | Full meditation — deep + universal reach + Neo4j analysis |
+
 ## Prompt Checklist
 
 Before delegating to a subagent — verify the prompt includes:
