@@ -15,6 +15,70 @@
       "build_used": null,
       "outcome": "success",
       "phase_hint": "IMPLEMENTATION"
+    },
+    {
+      "id": "req-2026-03-03-2157-001",
+      "timestamp": "2026-03-03T21:57:08.664333+00:00",
+      "tier": "T3",
+      "verb": "rename",
+      "domain": "infrastructure",
+      "subagents_used": [
+        "engineer"
+      ],
+      "task_summary": "Renamed brain to instance across 5 coordinator files",
+      "gap_detected": false,
+      "gap_severity": null,
+      "build_used": null,
+      "outcome": "success",
+      "phase_hint": null
+    },
+    {
+      "id": "req-2026-03-03-2157-002",
+      "timestamp": "2026-03-03T21:57:08.689004+00:00",
+      "tier": "T3",
+      "verb": "fix",
+      "domain": "memory",
+      "subagents_used": [
+        "engineer"
+      ],
+      "task_summary": "Added _source isolation to memory_write.py and memory_search.py",
+      "gap_detected": false,
+      "gap_severity": null,
+      "build_used": null,
+      "outcome": "success",
+      "phase_hint": null
+    },
+    {
+      "id": "req-2026-03-03-2157-003",
+      "timestamp": "2026-03-03T21:57:08.711091+00:00",
+      "tier": "T4",
+      "verb": "create",
+      "domain": "memory",
+      "subagents_used": [
+        "engineer"
+      ],
+      "task_summary": "Seeded 94 knowledge records into Qdrant for FalkVelt memory",
+      "gap_detected": false,
+      "gap_severity": null,
+      "build_used": null,
+      "outcome": "success",
+      "phase_hint": "IMPLEMENTATION"
+    },
+    {
+      "id": "req-2026-03-03-2157-004",
+      "timestamp": "2026-03-03T21:57:08.733101+00:00",
+      "tier": "T4",
+      "verb": "analyze",
+      "domain": "evolution",
+      "subagents_used": [
+        "coordinator"
+      ],
+      "task_summary": "Retreat #3: integrity 0.83, graph cleanup, memory seeding verified",
+      "gap_detected": false,
+      "gap_severity": null,
+      "build_used": null,
+      "outcome": "success",
+      "phase_hint": null
     }
   ]
 }

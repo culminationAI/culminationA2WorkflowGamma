@@ -1,64 +1,57 @@
 {
-  "retreat_id": 2,
+  "retreat_id": 3,
   "status": "completed",
-  "focus": "pipeline_diagnostics",
+  "focus": "post_memory_seeding",
   "cycle_current": 1,
-  "cycle_total": 1,
-  "started_at": "2026-03-03T22:20:00Z",
-  "last_checkpoint": "2026-03-03T22:45:00Z",
-  "exit_reason": "single_cycle_diagnostic",
+  "cycle_total": 5,
+  "started_at": "2026-03-04T00:00:00Z",
+  "last_checkpoint": "2026-03-04T00:30:00Z",
+  "exit_reason": "integrity_threshold",
   "previous_retreat": {
-    "retreat_id": 1,
-    "final_integrity": 0.86,
-    "final_flexibility": 100,
-    "exit_reason": "integrity_threshold"
+    "retreat_id": 2,
+    "final_integrity": 0.84,
+    "final_flexibility": 43,
+    "exit_reason": "single_cycle_diagnostic"
   },
   "cycles": [
     {
       "cycle": 1,
       "meditation_intensity": "quick",
-      "meditation_id": "med-2026-03-03-R2C1",
-      "meditation_focus": "pipeline_tracing",
-      "integrity_score": 0.76,
+      "meditation_id": "med-2026-03-04-R3C1",
+      "meditation_focus": "full_dimension_scan",
+      "integrity_score": 0.83,
       "flexibility_score": 100,
       "yoga_automated": {
         "pranayama": "FLOWING",
         "tadasana": "FLOWING",
         "savasana": "FLOWING"
       },
-      "yoga_manual": {
-        "pose3_virabhadrasana_buildup": "PARTIAL",
-        "pose4_natarajasana_dispatch": "PARTIAL",
-        "pose6_surya_namaskar_evolution": "PARTIAL",
-        "spec_acquisition": "PARTIAL"
+      "yoga_manual": null,
+      "dimension_scores": {
+        "agent_coherence": 1.00,
+        "protocol_coherence": 0.90,
+        "spec_coherence": 0.95,
+        "memory_integrity": 0.85,
+        "build_health": 0.55,
+        "connection_density": 0.80,
+        "version_alignment": 1.00,
+        "pipeline_health": 0.60
       },
-      "pipeline_scores": {
-        "build_up_quick_path": 1.0,
-        "build_up_full_path": 0.25,
-        "self_build_up": 0.50,
-        "evolution_hooks": 0.43,
-        "spec_acquisition": 0.70,
-        "dispatch_pipeline": 0.50
-      },
-      "items_resolved": 4,
-      "items_remaining": 6,
+      "items_resolved": 3,
+      "items_remaining": 3,
       "items_failed": 0,
-      "timestamp": "2026-03-03T22:45:00Z",
+      "timestamp": "2026-03-04T00:30:00Z",
       "repairs": [
-        {"id": "REG-001", "description": "VERSION node recreated (was missing)", "category": "graph_repair", "verified": true},
-        {"id": "REG-002", "description": "spec-asset-exchange REALIZED→IMPLEMENTED", "category": "graph_repair", "verified": true},
-        {"id": "REG-003", "description": "6 missing OWNS_PROTOCOL edges created (25→31)", "category": "graph_repair", "verified": true},
-        {"id": "PM-001", "description": "meditation protocol path fixed: quality→core", "category": "graph_repair", "verified": true}
+        {"id": "GR-001", "description": "Deleted 16 orphan Spec nodes (null names, no owner)", "category": "graph_repair", "verified": true},
+        {"id": "GR-002", "description": "Recreated 12 Spec nodes with full data from spec-registry (name, status, domain, type)", "category": "graph_repair", "verified": true},
+        {"id": "MEM-001", "description": "Seeded 94 memory records tagged _follower_ (was 0)", "category": "memory_repair", "verified": true}
       ],
       "remaining_issues": [
-        {"id": "PB-001", "priority": "P1", "description": "request-history.json empty — blocks Evolution Hooks 4+5", "route": "behavioral"},
         {"id": "PB-002", "priority": "P2", "description": "No buffered builds — blocks Hook 3", "route": "lifecycle"},
         {"id": "PB-003", "priority": "P2", "description": "Full build-up path (Steps 3-6) never tested", "route": "testing"},
-        {"id": "PB-004", "priority": "P2", "description": "Smoke test framework absent", "route": "testing"},
-        {"id": "PB-005", "priority": "P2", "description": "Post-dispatch verification not executing", "route": "behavioral"},
-        {"id": "PB-006", "priority": "P2", "description": "Hook 2 session-end review has no enforcement", "route": "behavioral"}
+        {"id": "PB-004", "priority": "P2", "description": "Smoke test framework absent", "route": "testing"}
       ],
-      "notes": "Pipeline-focused diagnostic retreat. Infrastructure regressions from retreat #1 fixed (graph edges, VERSION node, spec status). Core finding: quick paths work, full/advanced paths are STUB or BLOCKED due to missing prerequisites (request-history, buffered builds, cloning infrastructure). Evolution at 43% capacity."
+      "notes": "Post-memory-seeding retreat. 94 records seeded into Qdrant (memory integrity 0→0.85). Graph cleaned: 16 orphan Specs deleted, 12 rebuilt with full data. Integrity 0.83 — exit threshold met in cycle 1. Remaining 3 items are all P2 behavioral/testing — cannot be auto-healed."
     }
   ]
 }
