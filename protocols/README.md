@@ -17,7 +17,9 @@ protocols/
 ├── agents/                ← agent lifecycle and communication
 │   ├── agent-creation.md  ← creating new domain agents
 │   ├── agent-communication.md ← dispatch/response format
-│   └── meta.md            ← protocol lifecycle (meta-protocol)
+│   ├── meta.md            ← protocol lifecycle (meta-protocol)
+│   ├── inter-agent-exchange.md ← multi-workspace messaging hub
+│   └── knowledge-sharing.md ← push-based knowledge sharing between coordinators
 ├── knowledge/             ← memory, exploration, context
 │   ├── exploration.md     ← pathfinder operations
 │   ├── memory.md          ← memory layer usage rules
@@ -65,6 +67,16 @@ Quick summary:
 | `agents/` | Agent lifecycle | How to create agents, communicate between them |
 | `knowledge/` | Information management | How to explore, remember, manage context |
 | `quality/` | Verification | How to test, benchmark, clone for safety |
+
+## Agent Protocols
+
+| Protocol | Purpose | File |
+|----------|---------|------|
+| Agent Creation | Creating new domain agents | `agents/agent-creation.md` |
+| Agent Communication | Dispatch/response format | `agents/agent-communication.md` |
+| Meta (Protocol Lifecycle) | Protocol CRUD, auto-creation | `agents/meta.md` |
+| Inter-Agent Exchange | Multi-workspace messaging hub | `agents/inter-agent-exchange.md` |
+| Knowledge Sharing | Push-based knowledge sharing between coordinators | `agents/knowledge-sharing.md` |
 
 ## Quality Protocols
 

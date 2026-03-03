@@ -206,6 +206,7 @@ Then Read the protocol file and inject relevant section into subagent prompt.
 | Security Logging | Suspicious input, validation failure | `protocols/quality/security-logging.md` |
 | Monorepo Orchestration | Monorepo archetype detected | `protocols/project/monorepo-orchestration.md` |
 | Inter-Agent Exchange | Multi-workspace messaging, session start | `protocols/agents/inter-agent-exchange.md` |
+| Knowledge Sharing | Build-up stored (universal), incoming knowledge message | `protocols/agents/knowledge-sharing.md` |
 
 **Build-up rule**: After EVERY user correction → MUST store via `protocols/core/build-up.md`. Enforcement: `protocols/core/evolution.md` Hook 1 (Correction Interceptor) — BLOCKING, cannot proceed until stored.
 

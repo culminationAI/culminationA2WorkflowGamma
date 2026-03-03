@@ -15,6 +15,7 @@ This protocol does NOT replace `build-up.md`, `self-build-up.md`, or `gap-analys
 | STRUCTURAL gap detected by gap-analysis | Adaptive Orchestrator | Score options → reactivate / assemble / create |
 | Every 10th T3+ task (request-history count % 10 == 0) | Predictive Loop | Run predictive analysis |
 | Completed task (before closing todo) | Post-Task Hook | Verify correction capture + log gaps |
+| Build-up stored (universal correction) | Knowledge Export | Send digest to other agents |
 
 ## Hook 1: Correction Interceptor (BLOCKING)
 
@@ -128,6 +129,18 @@ This protocol does NOT replace `build-up.md`, `self-build-up.md`, or `gap-analys
 3. **Request history:** Append entry per `dispatcher.md` §Post-Dispatch Verification.
 4. **Predictive trigger:** Check if Hook 4 condition is met.
 
+## Hook 6: Knowledge Export
+
+**When:** After Hook 1 (Correction Interceptor) stores a build-up record.
+
+**Process:**
+1. Evaluate applicability: universal or workspace-specific (see `knowledge-sharing.md` §Applicability heuristic).
+2. If universal → create knowledge digest → send via exchange `type: "knowledge"` to all known agents.
+3. If workspace-specific → skip export.
+4. At session end (Hook 2), batch-export all unexported universal corrections as one message.
+
+**Rule:** This hook runs AFTER the build-up is stored locally. Export failure does NOT block the coordinator.
+
 ## Session Variables
 
 In-memory only, reset at session start. Not persisted to files.
@@ -137,6 +150,7 @@ _corrections_this_session: int = 0
 _correction_log: list = []       # {timestamp, summary, stored, build_up_type}
 _session_gaps: list = []          # {domain, severity, task_id}
 _t3plus_count: int = 0
+_exported_corrections: list = []  # correction_ids exported this session
 ```
 
 ## Rules
@@ -149,6 +163,7 @@ _t3plus_count: int = 0
 6. This protocol does NOT modify `build-up.md` (protected file) — it orchestrates it.
 7. All session variables reset at session start.
 8. Keyword matching uses simple word overlap: `|intersection| / |union|`.
+9. Hook 6 is NON-BLOCKING — export failure does not stop the coordinator.
 
 ## Integration
 
@@ -159,3 +174,4 @@ _t3plus_count: int = 0
 | `gap-analysis.md` | Hook 3 triggered by STRUCTURAL gaps; Hook 4 uses §Predictive |
 | `dispatcher.md` | Hook 5 extends Post-Dispatch Verification with correction check |
 | `CLAUDE.md` | Session Start initializes variables; Session End triggers Hook 2 |
+| `knowledge-sharing.md` | Hook 6 triggers knowledge export; Hook 2 includes batch export |

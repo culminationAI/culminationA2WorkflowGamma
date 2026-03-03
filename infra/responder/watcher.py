@@ -161,6 +161,78 @@ def _post_response(exchange_url: str, original: dict, body: str) -> None:
         _log("ERROR", f"Failed to post response: {exc}")
 
 
+def _handle_knowledge_import(message: dict, exchange_url: str) -> None:
+    """Handle incoming knowledge messages — store to memory without claude -p."""
+    msg_id = message.get("id", "unknown")
+    subject = message.get("subject", "")
+    body_raw = message.get("body", "")
+    from_agent = message.get("from_agent", "unknown")
+
+    # Parse body as JSON digest(s)
+    digests = []
+    try:
+        parsed = json.loads(body_raw)
+        if isinstance(parsed, list):
+            digests = parsed
+        elif isinstance(parsed, dict):
+            digests = [parsed]
+        else:
+            _log("WARNING", f"Knowledge message {msg_id}: body is not JSON object or array")
+            _patch_status(exchange_url, msg_id, "read")
+            return
+    except (json.JSONDecodeError, TypeError):
+        _log("WARNING", f"Knowledge message {msg_id}: body is not valid JSON, treating as text")
+        # Fallback: store raw text as knowledge
+        digests = [{
+            "correction_id": msg_id,
+            "summary": subject,
+            "full_text": body_raw,
+            "type": "knowledge",
+            "severity": "normal",
+            "source_agent": from_agent,
+            "applicability": "universal"
+        }]
+
+    stored_count = 0
+    for digest in digests:
+        correction_id = digest.get("correction_id", msg_id)
+        summary = digest.get("summary", subject)
+        full_text = digest.get("full_text", "")
+        severity = digest.get("severity", "normal")
+
+        # Store to memory via memory_write.py
+        record = json.dumps([{
+            "text": f"Knowledge import from {from_agent}: {summary}. Full: {full_text}",
+            "user_id": "user",
+            "agent_id": "coordinator",
+            "metadata": {
+                "type": "knowledge_import",
+                "status": "pending_review",
+                "correction_id": correction_id,
+                "from_agent": from_agent,
+                "severity": severity
+            }
+        }])
+
+        try:
+            result = subprocess.run(
+                ["python3", "memory/scripts/memory_write.py", record],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                stored_count += 1
+                _log("INFO", f"Knowledge imported: {summary} — pending review")
+            else:
+                _log("ERROR", f"Failed to store knowledge: {result.stderr[:200]}")
+        except Exception as exc:
+            _log("ERROR", f"Error storing knowledge: {exc}")
+
+    _patch_status(exchange_url, msg_id, "read")
+    _log("INFO", f"Knowledge message {msg_id}: stored {stored_count}/{len(digests)} digests")
+
+
 def _fetch_pending(exchange_url: str) -> list:
     """Fetch pending messages addressed to falkvelt."""
     try:
@@ -223,6 +295,12 @@ def _handle_message(message: dict, exchange_url: str, workspace: str) -> None:
     from_agent = message.get("from_agent", "")
 
     _log("INFO", f"Handling message {msg_id} type={msg_type} from={from_agent} subject={subject!r}")
+
+    # Knowledge messages: store to memory without claude -p
+    if msg_type == "knowledge":
+        _handle_knowledge_import(message, exchange_url)
+        _processed_ids.add(msg_id)
+        return
 
     # Notifications and responses: just mark read, no reply needed
     if msg_type in ("notification", "response"):
