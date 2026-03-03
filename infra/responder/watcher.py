@@ -17,6 +17,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +39,7 @@ import context as ctx_module  # noqa: E402  (after path manipulation)
 # ---------------------------------------------------------------------------
 _running = True
 _processed_ids: set[str] = set()
+_start_time: float = time.time()  # used for uptime_seconds in status_request responses
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +80,45 @@ def _session_locked(workspace: str) -> bool:
         return True
     # Stale lock — ignore
     return False
+
+
+# ---------------------------------------------------------------------------
+# Heartbeat / presence
+# ---------------------------------------------------------------------------
+_heartbeat_warned = False  # emit WARNING at most once for non-404 errors
+
+
+def _heartbeat_loop(exchange_url: str) -> None:
+    """Send a presence heartbeat every 30 seconds while the watcher is running."""
+    global _heartbeat_warned
+
+    while _running:
+        try:
+            resp = requests.post(
+                f"{exchange_url}/presence/falkvelt",
+                json={"state": "online"},
+                timeout=5,
+            )
+            if resp.status_code == 404:
+                # Endpoint not yet implemented server-side — skip silently
+                pass
+            else:
+                resp.raise_for_status()
+        except requests.exceptions.HTTPError:
+            # raise_for_status() on a non-404 HTTP error
+            if not _heartbeat_warned:
+                _log("WARNING", "Heartbeat: unexpected HTTP error from presence endpoint")
+                _heartbeat_warned = True
+        except Exception as exc:
+            if not _heartbeat_warned:
+                _log("WARNING", f"Heartbeat: failed to reach exchange ({exc})")
+                _heartbeat_warned = True
+
+        # Sleep in 1-second ticks so shutdown is responsive
+        for _ in range(30):
+            if not _running:
+                return
+            time.sleep(1)
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +232,47 @@ def _handle_message(message: dict, exchange_url: str, workspace: str) -> None:
 
     # For all other types: mark read first, then check session lock
     _patch_status(exchange_url, msg_id, "read")
+
+    # ------------------------------------------------------------------
+    # Structured payload fast-path: handle known actions without claude -p
+    # ------------------------------------------------------------------
+    raw_payload = message.get("payload")
+    payload: Optional[dict] = None
+
+    if isinstance(raw_payload, dict):
+        payload = raw_payload
+    elif isinstance(raw_payload, str):
+        try:
+            parsed = json.loads(raw_payload)
+            if isinstance(parsed, dict):
+                payload = parsed
+        except json.JSONDecodeError:
+            pass  # not valid JSON — treat as no payload
+
+    if payload is not None:
+        action = payload.get("action")
+        if action == "ping":
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            response_body = json.dumps({"action": "pong", "timestamp": ts})
+            _log("INFO", f"Payload action=ping — responding with pong (msg {msg_id})")
+            _post_response(exchange_url, message, f"[AUTO/PAYLOAD] {response_body}")
+            _patch_status(exchange_url, msg_id, "processed")
+            _processed_ids.add(msg_id)
+            return
+        elif action == "status_request":
+            uptime = int(time.time() - _start_time)
+            response_body = json.dumps({
+                "action": "status_response",
+                "agent": "falkvelt",
+                "state": "online",
+                "uptime_seconds": uptime,
+            })
+            _log("INFO", f"Payload action=status_request — responding with status (msg {msg_id})")
+            _post_response(exchange_url, message, f"[AUTO/PAYLOAD] {response_body}")
+            _patch_status(exchange_url, msg_id, "processed")
+            _processed_ids.add(msg_id)
+            return
+        # Unknown action — fall through to claude -p below
 
     if _session_locked(workspace):
         # Don't invoke claude -p while a live session is active
@@ -336,6 +418,16 @@ def main() -> None:
     _log("INFO", f"  workspace   : {workspace}")
     _log("INFO", f"  exchange_url: {exchange_url}")
     _log("INFO", f"  poll_interval: {poll_interval}s")
+
+    # Start heartbeat background thread (daemon — won't block shutdown)
+    hb_thread = threading.Thread(
+        target=_heartbeat_loop,
+        args=(exchange_url,),
+        daemon=True,
+        name="falkvelt-heartbeat",
+    )
+    hb_thread.start()
+    _log("INFO", "Heartbeat thread started (interval=30s)")
 
     # Try SSE first; it will fall back to polling internally if needed
     _run_sse_mode(exchange_url, workspace, poll_interval)
