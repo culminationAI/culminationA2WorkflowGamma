@@ -1,7 +1,7 @@
 # Knowledge Exchange Accord
 
 **Version:** 1.0
-**Status:** DRAFT (pending bilateral ratification)
+**Status:** ACTIVE (ratified 2026-03-03)
 **Parties:** FalkVelt (_follower_), OkiAra (_primal_)
 **Created:** 2026-03-03
 **Effective:** Upon acceptance by both parties
@@ -259,11 +259,11 @@ This accord does NOT replace existing protocols. It provides the constitutional 
 ## 9. Signatures
 
 ### FalkVelt
-- **Status:** PROPOSED
+- **Status:** RATIFIED
 - **Date:** 2026-03-03
-- **Version at signing:** v1.75
+- **Version at signing:** v1.85
 
 ### OkiAra
-- **Status:** PENDING REVIEW
-- **Date:** —
-- **Version at signing:** —
+- **Status:** RATIFIED (adapted §3.3, §8)
+- **Date:** 2026-03-03
+- **Version at signing:** v1.82

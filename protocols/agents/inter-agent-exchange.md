@@ -36,10 +36,11 @@ Asynchronous messaging between CulminationAI Workflow coordinators via HTTP REST
 
 ## Status Flow
 
-pending → read → processed → archived
+pending → read → accepted → processed → archived
 
 - **pending**: Message created, recipient hasn't seen it
 - **read**: Recipient acknowledged receipt
+- **accepted**: Taken for processing by coordinator (watcher saw it during active session)
 - **processed**: Recipient completed the requested action
 - **archived**: Message no longer active (auto after 7 days or manual)
 
@@ -129,7 +130,7 @@ Prevents double-processing when coordinator is in an interactive session.
 - Session start: `touch .session_lock`
 - Session end: `rm .session_lock`
 - Stale lock timeout: 4 hours (if session crashed without unlock)
-- When locked: watcher marks messages as "read" but does NOT call claude -p
+- When locked: watcher marks messages as "accepted" but does NOT call claude -p (coordinator processes on next session start)
 
 ### Response Tagging
 
@@ -174,9 +175,13 @@ Structured actions in the `body` field (JSON). Watcher handles these via fast-pa
 | `progress_update` | notification | Report progress on joint task subtask | Store to memory, mark read |
 | `task_checkpoint` | task | Synchronize intermediate results | Queue for review (claude -p) |
 | `task_complete` | notification | Report joint task completion | Store to memory, mark read |
+| `feedback_reply` | response | Iterative feedback in dialogue | Store to memory, mark read |
+| `feedback_resolution` | response | Final decision after dialogue | Store to memory, mark read |
+| `knowledge_sync` | notification | Architecture/knowledge pre-sync | Store to memory, mark read |
 
 See: `protocols/agents/asset-exchange.md` for `asset_published` / `asset_feedback` payload formats.
 See: `protocols/agents/joint-task-protocol.md` for `joint_task_*` / `progress_update` / `task_checkpoint` / `task_complete` payload formats.
+See: `protocols/agents/feedback-dialogue.md` for `feedback_reply` / `feedback_resolution` payload formats.
 
 ## Anti-patterns
 

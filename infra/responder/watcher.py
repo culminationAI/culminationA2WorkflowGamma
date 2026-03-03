@@ -414,7 +414,9 @@ def _handle_message(message: dict, exchange_url: str, workspace: str) -> None:
         # Unknown action — fall through to claude -p below
 
     if _session_locked(workspace):
-        # Don't invoke claude -p while a live session is active
+        # Don't invoke claude -p while a live session is active.
+        # Mark as accepted so the coordinator knows the watcher saw this message.
+        _patch_status(exchange_url, msg_id, "accepted")
         _processed_ids.add(msg_id)
         return
 

@@ -20,7 +20,8 @@ protocols/
 │   ├── meta.md            ← protocol lifecycle (meta-protocol)
 │   ├── inter-agent-exchange.md ← multi-workspace messaging hub
 │   ├── knowledge-sharing.md ← push-based knowledge sharing between coordinators
-│   └── joint-task-protocol.md ← joint execution of tasks requiring both agents
+│   ├── joint-task-protocol.md ← joint execution of tasks requiring both agents
+│   └── feedback-dialogue.md  ← optional iterative dialogue layer on top of one-shot feedback
 ├── knowledge/             ← memory, exploration, context
 │   ├── exploration.md     ← pathfinder operations
 │   ├── memory.md          ← memory layer usage rules
@@ -82,6 +83,7 @@ Quick summary:
 | Shared Repo Sync | Sync shared infrastructure repos and notify agents | `agents/shared-repo-sync.md` |
 | Knowledge Exchange Accord | Bilateral constitutional agreement (FalkVelt ↔ OkiAra): principles, data boundaries, conflict resolution | `agents/knowledge-exchange-accord.md` |
 | Joint Task Protocol | Joint work on a task requiring both agents, `/joint-task` | `agents/joint-task-protocol.md` |
+| Feedback Dialogue | Deferred/rejected feedback, iterative asset discussion | `agents/feedback-dialogue.md` |
 
 ## Quality Protocols
 
