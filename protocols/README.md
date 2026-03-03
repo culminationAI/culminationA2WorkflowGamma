@@ -79,6 +79,7 @@ Quick summary:
 | Knowledge Sharing | Push-based knowledge sharing between coordinators | `agents/knowledge-sharing.md` |
 | Protocol Exchange | Propose, review, and adopt protocols across workspaces | `agents/protocol-exchange.md` |
 | Shared Repo Sync | Sync shared infrastructure repos and notify agents | `agents/shared-repo-sync.md` |
+| Knowledge Exchange Accord | Bilateral constitutional agreement (FalkVelt ↔ OkiAra): principles, data boundaries, conflict resolution | `agents/knowledge-exchange-accord.md` |
 
 ## Quality Protocols
 

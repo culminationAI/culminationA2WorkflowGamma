@@ -39,7 +39,7 @@
 | Evolution | `protocols/core/evolution.md` | User correction, session end, structural gap, post-task |
 | Meditation | `protocols/core/meditation.md` | `/meditate`, 5+ sessions without meditation, 3+ corrections |
 
-### agents (8 protocols)
+### agents (9 protocols)
 
 | Name | File | Trigger |
 |------|------|---------|
@@ -51,6 +51,7 @@
 | Protocol Exchange | `protocols/agents/protocol-exchange.md` | New universal protocol created, protocol proposal received |
 | Shared Repo Sync | `protocols/agents/shared-repo-sync.md` | Changes to shared exchange server code |
 | Asset Exchange | `protocols/agents/asset-exchange.md` | New spec/protocol/graph created, meditation findings, `asset_published` notification |
+| Knowledge Exchange Accord | `protocols/agents/knowledge-exchange-accord.md` | Bilateral ratification, principle reference, accord amendments or withdrawal |
 
 ### knowledge (3 protocols)
 
@@ -74,7 +75,7 @@
 |------|------|---------|
 | Monorepo Orchestration | `protocols/project/monorepo-orchestration.md` | Monorepo archetype detected |
 
-**Total:** 25 protocols across 5 categories.
+**Total:** 26 protocols across 5 categories.
 
 ---
 
