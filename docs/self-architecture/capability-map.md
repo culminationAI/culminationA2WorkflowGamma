@@ -1,6 +1,6 @@
 # Capability Map — FalkVelt (_follower_)
 
-**Version:** 2.15
+**Version:** 2.66
 **Coordinator:** FalkVelt (Style: closed/robotic, Role: follower)
 **Primary coordinator:** OkiAra (_primal_ at `/Users/eliahkadu/Desktop/_primal_`)
 **User:** Eliah (style=brief+detailed, priorities=quality+speed, language=Russian)
@@ -63,7 +63,7 @@
 | Memory | `protocols/knowledge/memory.md` | Memory read/write |
 | Context Engineering | `protocols/knowledge/context-engineering.md` | Context assembly |
 
-### quality (4 protocols)
+### quality (6 protocols)
 
 | Name | File | Trigger |
 |------|------|---------|
@@ -71,6 +71,8 @@
 | Cloning | `protocols/quality/cloning.md` | Build-up pipeline |
 | Yoga | `protocols/quality/yoga.md` | End-to-end pipeline health check, `/yoga` |
 | Security Logging | `protocols/quality/security-logging.md` | Suspicious input, validation failure |
+| Self-Healing | `protocols/quality/self-healing.md` | `/heal`, retreat cycle, Hook 7 delegation, integrity < 0.5 |
+| Retreat | `protocols/quality/retreat.md` | `/retreat [N]`, `/retreat --resume` |
 
 ### project (1 protocol)
 
@@ -78,7 +80,7 @@
 |------|------|---------|
 | Monorepo Orchestration | `protocols/project/monorepo-orchestration.md` | Monorepo archetype detected |
 
-**Total:** 29 protocols across 5 categories.
+**Total:** 31 protocols across 5 categories.
 
 ---
 

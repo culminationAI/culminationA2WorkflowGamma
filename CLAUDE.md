@@ -1,4 +1,4 @@
-<!-- WORKFLOW_VERSION: 2.66 -->
+<!-- WORKFLOW_VERSION: 2.76 -->
 
 # CLAUDE.md — Main Workspace
 
@@ -220,6 +220,8 @@ Then Read the protocol file and inject relevant section into subagent prompt.
 | Cloning | Build-up pipeline | `protocols/quality/cloning.md` |
 | Yoga | End-to-end pipeline health check, `/yoga` | `protocols/quality/yoga.md` |
 | Security Logging | Suspicious input, validation failure | `protocols/quality/security-logging.md` |
+| Self-Healing | `/heal`, retreat cycle, Hook 7 delegation, integrity < 0.5 | `protocols/quality/self-healing.md` |
+| Retreat | `/retreat [N]`, `/retreat --resume` | `protocols/quality/retreat.md` |
 | Monorepo Orchestration | Monorepo archetype detected | `protocols/project/monorepo-orchestration.md` |
 | Inter-Agent Exchange | Multi-workspace messaging, session start | `protocols/agents/inter-agent-exchange.md` |
 | Knowledge Sharing | Build-up stored (universal), incoming knowledge message | `protocols/agents/knowledge-sharing.md` |

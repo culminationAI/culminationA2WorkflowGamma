@@ -108,6 +108,9 @@ Explicit slash-command overrides. Take precedence over verb-based tier classific
 | `/meditate quick` | T3 | coordinator (direct tools) | Quick meditation — coordinator-only scan |
 | `/meditate` or `/meditate deep` | T4 | pathfinder | Deep meditation — full introspection with connection weaving |
 | `/meditate full` | T5 | pathfinder | Full meditation — deep + universal reach + Neo4j analysis |
+| `/heal` | T3 | coordinator + engineer | Self-healing — automated infrastructure repair pipeline |
+| `/retreat [N]` | T4 | coordinator | Retreat — N cycles meditation→yoga→self-healing (default: 10) |
+| `/retreat --resume` | T4 | coordinator | Resume paused retreat from last checkpoint |
 
 ## Prompt Checklist
 

@@ -193,6 +193,8 @@ This protocol does NOT replace `build-up.md`, `self-build-up.md`, or `gap-analys
 - Batch execution (multiple repairs per run)
 - Own pipeline (does not route through build-up.md)
 
+**Automation:** Hook 7 can be delegated to the self-healing protocol via `/heal` command. See `protocols/quality/self-healing.md` for the automated pipeline (collect → classify → execute → verify → store) and `memory/scripts/self_healing.py` for the automation script.
+
 **Rule:** Repair is NON-BLOCKING — coordinator may continue with other tasks between repair items. Repairs do not preempt Hook 1 corrections.
 
 ## Session Variables
