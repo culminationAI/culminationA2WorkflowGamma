@@ -26,6 +26,16 @@ No subagents. Reads three sources, produces one paragraph.
 1. Read `docs/self-architecture/capability-map.md`
    - If missing → skip, schedule a deep scan for next opportunity
 2. Read `docs/self-architecture/build-registry.json` — check active build TTLs for expiry warnings
+2.5. Protocol TTL check (Neo4j):
+   ```cypher
+   MATCH (p:Protocol)
+   WHERE p.last_triggered IS NULL
+      OR date(p.last_triggered) + duration({days: p.ttl_days}) < date()
+   RETURN p.name, p.category, p.ttl_days, p.last_triggered
+   ORDER BY p.category, p.name
+   ```
+   - If stale protocols found → include count in output paragraph: "N protocols stale (never triggered or TTL expired)"
+   - Stale core protocols (ttl_days=30) are higher priority than quality (ttl_days=60)
 3. Search memory: `"gap analysis blocker capability"` `--limit 5`
 4. Output: 1-paragraph status — one of:
    - No gaps detected since last analysis
@@ -106,6 +116,35 @@ Before recommending build creation, check `build-registry.json` for buffered bui
 2. Match gap against `components.agents[].description` in each buffered build
 3. If match found → recommend **reactivation** of that build (provide build ID)
 4. Reactivation is always preferred over creating a new build
+
+## Protocol TTL
+
+Protocol nodes in Neo4j carry `ttl_days`, `last_triggered`, and `category` properties. TTL tracks whether protocols are actively used or going stale.
+
+### TTL Defaults
+
+| Category | TTL (days) | Protocols |
+|----------|-----------|-----------|
+| core | 30 | dispatcher, evolution, build-up, etc. |
+| agents | 45 | inter-agent-exchange, knowledge-sharing, etc. |
+| knowledge | 45 | memory, exploration, context-engineering |
+| quality | 60 | yoga, self-healing, retreat, testing, etc. |
+| project | 60 | monorepo-orchestration, workflow-qa |
+
+### Updating last_triggered
+
+When a protocol is loaded and used during dispatch (T3+ tasks), coordinator SHOULD update:
+```cypher
+MATCH (p:Protocol {name: $name}) SET p.last_triggered = date()
+```
+
+This is a SHOULD (not MUST) — lightweight overhead, best-effort.
+
+### Stale Protocol Actions
+
+- **Never triggered** (last_triggered IS NULL): Informational only — new protocols haven't been exercised yet
+- **TTL expired**: Include in gap-analysis output. If core protocol is stale → flag as priority.
+- **No auto-action**: Stale protocols are reported but never auto-deactivated or deleted
 
 ## Available Spec Check
 
@@ -263,3 +302,4 @@ Add to gap analysis log entry:
 | **Self Build-Up** | Deep gap analysis is Phase 2 of the self-build-up pipeline. |
 | **Session Start** | Lightweight scan is step 5 of coordinator's session start flow (after memory load). |
 | **Memory** | All gap analysis results stored with `{type: "gap_analysis"}` metadata. |
+| **Protocol TTL** | Lightweight scan Step 2.5 checks Neo4j for stale protocols. Protocols update `last_triggered` on use. |
