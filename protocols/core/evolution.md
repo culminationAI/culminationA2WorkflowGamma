@@ -16,6 +16,7 @@ This protocol does NOT replace `build-up.md`, `self-build-up.md`, or `gap-analys
 | Every 10th T3+ task (request-history count % 10 == 0) | Predictive Loop | Run predictive analysis |
 | Completed task (before closing todo) | Post-Task Hook | Verify correction capture + log gaps |
 | Build-up stored (universal correction) | Knowledge Export | Send digest to other agents |
+| Meditation repair recommendations (P0-P2) | Repair Pipeline | Collect → classify → execute → verify → store |
 
 ## Hook 1: Correction Interceptor (BLOCKING)
 
@@ -141,6 +142,58 @@ This protocol does NOT replace `build-up.md`, `self-build-up.md`, or `gap-analys
 
 **Rule:** This hook runs AFTER the build-up is stored locally. Export failure does NOT block the coordinator.
 
+## Hook 7: Repair Pipeline
+
+**When:** Meditation findings contain unresolved P0-P2 infrastructure recommendations, user runs `/repair`, or session-start integrity check finds any dimension < 0.5 in latest meditation.
+
+**Nature:** Infrastructure maintenance — deterministic fixes for version mismatches, missing graph edges, unindexed protocols, stale memory records. NOT behavioral changes. Does NOT route through `build-up.md`.
+
+**Repair Categories:**
+
+| Category | Description | Executor |
+|----------|-------------|----------|
+| `version_sync` | Synchronize version values across Neo4j, capability-map, memory | engineer |
+| `graph_repair` | Fix missing edges, remove phantom nodes, add IMPLEMENTS/GOVERNS | engineer |
+| `index_repair` | Update CLAUDE.md protocol index, README.md, spec-registry asymmetry | protocol-manager |
+| `memory_cleanup` | Supersede stale records, add missing _source/type metadata | engineer |
+| `infra_repair` | Create missing infrastructure files/directories (evolve/, request-history.json) | engineer |
+
+**Process:**
+1. **Collect:** Read `docs/self-architecture/meditation-log.md` → extract recommendations from latest session. Or accept manual list via `/repair`.
+2. **Classify:** Assign repair category per table above. Verify each item is mechanical (data/metadata/graph/index), not behavioral. If behavioral → reject, route to Hook 1 or Hook 3.
+3. **Prioritize:** P0 first, then P1, P2. Within same priority, batch by category for efficiency.
+4. **Execute:** Dispatch appropriate subagent per category. Each repair item becomes a specific, atomic action (one Cypher query, one file edit, one memory write).
+5. **Verify:** Re-check each repaired item — query Neo4j, re-read file, re-search memory. If verification fails → log failure, do not retry (flag for manual review).
+6. **Store:** Record repair batch to memory:
+   ```json
+   {
+     "text": "Repair run: {N} items fixed. Categories: {list}. Source: meditation {id}.",
+     "agent_id": "coordinator",
+     "metadata": {
+       "type": "repair",
+       "subtype": "{primary_category}",
+       "meditation_id": "{source_meditation_id}",
+       "items_fixed": N,
+       "items_failed": M,
+       "_source": "_follower_"
+     }
+   }
+   ```
+
+**Security Gate (adapted from build-up Step 8):**
+- MUST NOT weaken any MUST/MUST NOT rule
+- MUST NOT modify protected files (build-up.md, security-logging.md, research_validate.py, memory_write.py)
+- MUST NOT change behavioral rules — only data, metadata, graph edges, and indexes
+- All repairs logged to memory for traceability
+
+**Key differences from build-up:**
+- No variant testing (repairs are deterministic)
+- No version bump (restoring consistency, not evolving behavior)
+- Batch execution (multiple repairs per run)
+- Own pipeline (does not route through build-up.md)
+
+**Rule:** Repair is NON-BLOCKING — coordinator may continue with other tasks between repair items. Repairs do not preempt Hook 1 corrections.
+
 ## Session Variables
 
 In-memory only, reset at session start. Not persisted to files.
@@ -151,6 +204,9 @@ _correction_log: list = []       # {timestamp, summary, stored, build_up_type}
 _session_gaps: list = []          # {domain, severity, task_id}
 _t3plus_count: int = 0
 _exported_corrections: list = []  # correction_ids exported this session
+_repair_queue: list = []              # {priority, category, description, source_meditation_id}
+_repairs_this_session: int = 0
+_repair_log: list = []                # {timestamp, category, items_fixed, verified}
 ```
 
 ## Rules
@@ -164,6 +220,7 @@ _exported_corrections: list = []  # correction_ids exported this session
 7. All session variables reset at session start.
 8. Keyword matching uses simple word overlap: `|intersection| / |union|`.
 9. Hook 6 is NON-BLOCKING — export failure does not stop the coordinator.
+10. Hook 7 is NON-BLOCKING — repairs do not preempt Hook 1 corrections.
 
 ## Integration
 
@@ -175,3 +232,4 @@ _exported_corrections: list = []  # correction_ids exported this session
 | `dispatcher.md` | Hook 5 extends Post-Dispatch Verification with correction check |
 | `CLAUDE.md` | Session Start initializes variables; Session End triggers Hook 2 |
 | `knowledge-sharing.md` | Hook 6 triggers knowledge export; Hook 2 includes batch export |
+| `meditation.md` | Hook 7 reads meditation-log.md recommendations as repair input |

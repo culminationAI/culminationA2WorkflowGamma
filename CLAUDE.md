@@ -1,4 +1,4 @@
-<!-- WORKFLOW_VERSION: 2.05 -->
+<!-- WORKFLOW_VERSION: 2.15 -->
 
 # CLAUDE.md — Main Workspace
 
@@ -64,7 +64,7 @@ project-root/               <- you are here (workspace root)
 4. Read active plans if working on a specific project
 5. Lightweight gap analysis: check `docs/self-architecture/capability-map.md` freshness + `docs/self-architecture/build-registry.json` build TTLs (see `protocols/core/gap-analysis.md`)
 6. If active build TTL expiring within 2 days/sessions → warn user
-7. Initialize evolution tracking: reset `_corrections_this_session=0`, `_correction_log=[]`, `_session_gaps=[]`, `_t3plus_count=0` (see `protocols/core/evolution.md`)
+7. Initialize evolution tracking: reset `_corrections_this_session=0`, `_correction_log=[]`, `_session_gaps=[]`, `_t3plus_count=0`, `_repair_queue=[]`, `_repairs_this_session=0`, `_repair_log=[]` (see `protocols/core/evolution.md`)
 8. Session lock for watcher: `touch .session_lock` (prevents live responder from processing messages while coordinator is active)
 9. Check exchange + triage:
    ```bash
@@ -80,6 +80,7 @@ project-root/               <- you are here (workspace root)
    - Actionable messages → PATCH status='accepted' → add to session TODO
    - Informational messages → PATCH status='read' → store to memory
    - Process accepted messages during session → PATCH status='processed' when done
+9.5. Repair check: read latest meditation entry in `docs/self-architecture/meditation-log.md`. If unresolved P0-P2 recommendations exist → inform user: "N repair items pending (P0: X, P1: Y, P2: Z). Run /repair to fix." Initialize `_repair_queue`, `_repairs_this_session=0`, `_repair_log=[]`.
 10. On session end: run Evolution Session-End Review (`protocols/core/evolution.md` Hook 2) BEFORE removing session lock
 11. Remove session lock: `rm -f .session_lock` (re-enables live responder)
 
@@ -224,6 +225,8 @@ Then Read the protocol file and inject relevant section into subagent prompt.
 | Joint Task Protocol | Joint work with another agent, `/joint-task` | `protocols/agents/joint-task-protocol.md` |
 | Asset Exchange | New spec/protocol/graph created, meditation findings, `asset_published` notification | `protocols/agents/asset-exchange.md` |
 | Knowledge Exchange Accord | Bilateral ratification, principle reference, accord amendments or withdrawal | `protocols/agents/knowledge-exchange-accord.md` |
+| Protocol Exchange | New universal protocol created, protocol proposal received | `protocols/agents/protocol-exchange.md` |
+| Shared Repo Sync | Changes to shared exchange server code | `protocols/agents/shared-repo-sync.md` |
 | Feedback Dialogue | Deferred/rejected feedback, iterative discussion, `/feedback` | `protocols/agents/feedback-dialogue.md` |
 
 **Build-up rule**: After EVERY user correction → MUST store via `protocols/core/build-up.md`. Enforcement: `protocols/core/evolution.md` Hook 1 (Correction Interceptor) — BLOCKING, cannot proceed until stored.
