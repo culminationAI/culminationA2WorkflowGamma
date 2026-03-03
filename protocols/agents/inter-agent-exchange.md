@@ -178,6 +178,8 @@ Structured actions in the `body` field (JSON). Watcher handles these via fast-pa
 | `feedback_reply` | response | Iterative feedback in dialogue | Store to memory, mark read |
 | `feedback_resolution` | response | Final decision after dialogue | Store to memory, mark read |
 | `knowledge_sync` | notification | Architecture/knowledge pre-sync | Store to memory, mark read |
+| `knowledge_request` | `task` | Request specific knowledge from counterpart. Fields: `domain`, `description`, `urgency` (normal/high), `context`. Per Accord §4.4.1 |
+| `knowledge_catalog` | `notification` | Publish/update capability catalog. Fields: `catalog_path`, `domains_updated`, `total_available`. Per Accord §4.4.2 |
 
 See: `protocols/agents/asset-exchange.md` for `asset_published` / `asset_feedback` payload formats.
 See: `protocols/agents/joint-task-protocol.md` for `joint_task_*` / `progress_update` / `task_checkpoint` / `task_complete` payload formats.

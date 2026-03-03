@@ -273,6 +273,8 @@ Two fast-path handlers (no `claude -p`):
 
 ## Rules
 
+- **Dual-trigger priority:** When both asset-exchange and knowledge-sharing activate on the same event: asset-exchange is PRIMARY (durable GitHub storage), knowledge-sharing is SECONDARY (lightweight exchange digest). This ordering ensures the asset is persisted before notification is sent.
+
 1. GitHub = data transport. Exchange = notifications + feedback. NEVER send >1KB data through Exchange.
 2. Each agent writes ONLY to their own directory in shared repo.
 3. Commit convention: `share({type}): {asset_id} by {agent}`.

@@ -121,6 +121,7 @@ When running 2+ subagents on related topics:
 ### Memory Access Control
 - **Only coordinator writes to memory.** Agents return JSON-summary; coordinator decides what to store.
 - Agents MAY read from memory (for context via coordinator-injected search results) but MUST NOT call memory scripts directly.
+  - **Exception:** During meditation (Phase 3: Connection Weaving), pathfinder MAY call `memory_search.py` directly for semantic proximity analysis. This is the only sanctioned exception — coordinator cannot efficiently inject 30+ pairwise search results.
 - Violation of these rules → agent task terminated, security event logged.
 
 ### Contract Security

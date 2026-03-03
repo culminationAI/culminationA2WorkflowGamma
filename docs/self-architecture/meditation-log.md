@@ -270,3 +270,123 @@
   ]
 }
 ```
+
+---
+
+## Session 3 — 2026-03-03 | Full | Integrity: 0.60
+
+```json
+{
+  "meditation_id": "med-2026-03-03-1900",
+  "timestamp": "2026-03-03T19:00:00Z",
+  "intensity": "full",
+  "phases_executed": [1, 2, 3, 4, 5, 6],
+  "universal_reach": false,
+
+  "baseline": {
+    "identity": "FalkVelt v2.15 (CLAUDE.md) / v2.05 (Neo4j), closed/robotic, follower",
+    "agents": 4,
+    "protocols": 28,
+    "specs": 12,
+    "builds": 2,
+    "neo4j_nodes": 38,
+    "neo4j_edges": 69,
+    "qdrant_records": "65+",
+    "untagged_records": 0
+  },
+
+  "integrity_score": {
+    "overall": 0.60,
+    "delta_from_session_2": 0.01,
+    "dimensions": {
+      "AGENT_COHERENCE":    { "weight": 0.20, "score": 0.85, "delta": 0.00, "note": "All 4 agents reachable + in graph. Agents lack _source tag in Neo4j. Naming inconsistency persists (kebab vs snake)" },
+      "PROTOCOL_COHERENCE": { "weight": 0.20, "score": 0.60, "delta": 0.05, "note": "All 28 protocols now in CLAUDE.md index (S2 repair). RC-003/004/006 still open. 2 NEW: RC-007 (Accord 4.4 types not in IAE), RC-008 (spec-evolution desc stale '6 hooks' vs 7). README.md 2 ghost entries" },
+      "SPEC_COHERENCE":     { "weight": 0.10, "score": 0.75, "delta": 0.00, "note": "All 12 specs in Neo4j OWNS_SPEC. spec-evolution-protocol desc stale. related_specs asymmetry persists" },
+      "MEMORY_INTEGRITY":   { "weight": 0.15, "score": 0.72, "delta": 0.02, "note": "0 untagged (was 1 in S2). 3-5 records without type. 2 records _source=main (legacy). 97d702d2 (18 protocols) still active, not superseded" },
+      "BUILD_HEALTH":       { "weight": 0.10, "score": 0.40, "delta": 0.00, "note": "2 builds in registry, 5+ missing for post-S1 work. TTL never incremented. No evolve/, no request-history.json" },
+      "CONNECTION_DENSITY": { "weight": 0.15, "score": 0.35, "delta": -0.05, "note": "DEEPER MEASUREMENT: 22/28 protocols have NO Neo4j node. Graph asymmetry — specs well-represented (12 OWNS_SPEC), protocols invisible. 13 hidden connections, 7 missing bridges, 23 isolated components. Star topology persists. No IMPLEMENTS/GOVERNS/TRIGGERS edges" },
+      "VERSION_ALIGNMENT":  { "weight": 0.10, "score": 0.35, "delta": 0.05, "note": "Neo4j gap 1.05→0.10 (repair). Cap-map 1.65 gap 0.50 UNCHANGED since S1. Accord 4.4 types declared but not in IAE. Spec desc stale" }
+    }
+  },
+
+  "findings": {
+    "hard_conflicts": [
+      {"id": "HC-001", "status": "PARTIALLY_FIXED", "description": "Neo4j VERSION v2.05 vs CLAUDE.md 2.15. Gap reduced from 1.05 (S2) to 0.10 but re-emerged after Hook 7 version bump"},
+      {"id": "HC-006", "status": "NEW", "description": "capability-map.md v1.65 — gap 0.50 from CLAUDE.md 2.15. UNCHANGED since Session 1. Most persistent issue across all 3 sessions"}
+    ],
+
+    "rule_conflicts": [
+      {"id": "RC-003", "status": "OPEN_S1", "description": "security-logging advisory vs evolution BLOCKING — ordering undefined. 3 sessions unresolved"},
+      {"id": "RC-004", "status": "OPEN_S2", "description": "agent-communication:123 MUST NOT call memory scripts vs meditation pathfinder uses memory_search.py"},
+      {"id": "RC-005", "status": "PARTIAL_S2", "description": "coordinator NEVER writes vs meditation Phase 6 Write — delegated in practice, protocol text unchanged"},
+      {"id": "RC-006", "status": "OPEN_S2", "description": "knowledge-sharing + asset-exchange both trigger on same event, no priority rule"},
+      {"id": "RC-007", "status": "NEW", "description": "Accord v1.1 4.4 declares knowledge_request/knowledge_catalog action types. inter-agent-exchange.md Structured Payloads table NOT updated"},
+      {"id": "RC-008", "status": "NEW", "description": "spec-evolution-protocol description says '6 hooks' but actual evolution.md has 7 (Hook 7 Repair Pipeline)"}
+    ],
+
+    "soft_conflicts": [
+      {"id": "SC-002", "status": "OPEN_S1", "description": "related_specs asymmetry (meditation-protocol, asset-exchange)"},
+      {"id": "SC-003", "status": "OPEN_S1", "description": "1 stale memory record: 97d702d2 (18 protocols, type=NONE). Superseding record exists (948218c9) but old not marked"},
+      {"id": "SC-004", "status": "OPEN_S1", "description": "Build registry missing 5+ entries for post-S1 work"},
+      {"id": "SC-005", "status": "OPEN_S1", "description": "evolve/ directory and request-history.json still absent"},
+      {"id": "SC-007", "status": "OPEN_S2", "description": "README.md lists 2 ghost files: workflow-conventions.md, agent-testing.md"},
+      {"id": "SC-009", "status": "OPEN_S2", "description": "Neo4j version field vs workflow_version — no clear convention"},
+      {"id": "SC-010", "status": "OPEN_S2", "description": "TTL sessions_since_last_use counter never incremented"},
+      {"id": "SC-011", "status": "NEW", "description": "2 memory records with _source=main (legacy pre-init). Should be _follower_"},
+      {"id": "SC-012", "status": "NEW", "description": "capability_map Neo4j node has no label (labels: [])"},
+      {"id": "SC-013", "status": "NEW", "description": "FalkVelt agents in Neo4j have no _source tag (null)"}
+    ],
+
+    "connection_weaving": {
+      "hidden_connections_count": 13,
+      "delta_from_s2": "+2 new, 0 resolved",
+      "top_5": [
+        "pathfinder ↔ spec-capability-map: pathfinder PRODUCES capability-map but no edge. Strongest missing functional edge",
+        "spec-exchange-validation ↔ spec-evolution-protocol: both BLOCKING enforcers, no PRECEDES edge (RC-003 root cause)",
+        "feedback-dialogue ↔ asset-exchange: prose declares EXTENDS relationship, no graph edge (Validated)",
+        "context-engineering ↔ agent-communication: sequential activation on every dispatch, no FEEDS edge",
+        "cloning ↔ spec-evolution-protocol: Hook 3 Full path invokes cloning, no INVOKED_BY edge"
+      ],
+      "structural_finding": "Graph asymmetry: 12/12 specs have OWNS_SPEC edges, 0/28 protocols have any FalkVelt ownership edge. Protocols are graphically invisible",
+      "missing_bridges_count": 7,
+      "isolated_components_count": 23
+    },
+
+    "session_resolution_tracking": {
+      "s1_total": 10,
+      "s1_resolved_by_s3": 3,
+      "s1_resolution_rate": "30%",
+      "s2_total": 19,
+      "s2_resolved_by_s3": 4,
+      "s2_resolution_rate": "21%",
+      "persistent_issues": ["HC-001 (version gap, 3 sessions)", "SC-005 (evolve/ + request-history, 3 sessions)", "SC-002 (related_specs asymmetry, 3 sessions)", "capability-map staleness (3 sessions, gap growing)"]
+    }
+  },
+
+  "universal_reach": {
+    "activated": false,
+    "reason": "Gaps are internal consistency issues. OkiAra has same protocol graph deficiency (no OWNS_PROTOCOL edges). < 2 relevant cross-agent records. Nothing to import.",
+    "records_imported": 0,
+    "domains_accessed": []
+  },
+
+  "recommendations": [
+    {"priority": "P0", "action": "Fix Neo4j VERSION: v2.05 → v2.15 (re-emerged after Hook 7 bump)"},
+    {"priority": "P0", "action": "Update capability-map.md: v1.65 → v2.15 (3-session persistent issue, gap 0.50)"},
+    {"priority": "P1", "action": "Update inter-agent-exchange.md: add knowledge_request + knowledge_catalog to Structured Payloads table (Accord v1.1 §4.4)"},
+    {"priority": "P1", "action": "Update spec-evolution-protocol description in spec-registry.json: '6 hooks' → '7 hooks (incl. Hook 7 Repair Pipeline)'"},
+    {"priority": "P1", "action": "Create Protocol nodes in Neo4j for FalkVelt's 28 protocols with OWNS_PROTOCOL edges — single highest-leverage graph enrichment"},
+    {"priority": "P2", "action": "Resolve RC-003: define security-logging as pre-step to evolution Hook 1 (3 sessions unresolved)"},
+    {"priority": "P2", "action": "Resolve RC-004: add meditation exception to agent-communication:123 or restructure meditation to inject memory results"},
+    {"priority": "P2", "action": "Resolve RC-006: define knowledge-sharing vs asset-exchange priority rule"},
+    {"priority": "P3", "action": "Create evolve/ directory and request-history.json (3 sessions pending)"},
+    {"priority": "P3", "action": "Fix README.md: remove 2 ghost entries (workflow-conventions.md, agent-testing.md), add missing protocols to directory tree"},
+    {"priority": "P3", "action": "Add IMPLEMENTS/GOVERNS/TRIGGERS edges in Neo4j (top 5 from connection weaving)"},
+    {"priority": "P3", "action": "Fix capability_map Neo4j node: add label. Fix agent nodes: add _source tag"},
+    {"priority": "P4", "action": "Properly supersede stale memory 97d702d2. Add type to 3-5 untyped records. Fix 2 _source=main records"},
+    {"priority": "P4", "action": "TTL session counter implementation + retroactive build registry entries"},
+    {"priority": "P5", "action": "Resolve RC-005: update meditation protocol text to delegate writes explicitly"},
+    {"priority": "P5", "action": "Add related_specs symmetry fixes in spec-registry.json"}
+  ]
+}
+```

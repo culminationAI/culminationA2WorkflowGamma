@@ -87,7 +87,7 @@
       "depends_on": [],
       "related_specs": ["spec-capability-map"],
       "spec_file": null,
-      "description": "Evolution orchestration layer with 6 hooks: Correction Interceptor (BLOCKING), Session-End Review (MANDATORY), Adaptive Orchestrator, Predictive Loop, Post-Task Verification, Knowledge Export",
+      "description": "Evolution orchestration layer with 7 hooks: Correction Interceptor (BLOCKING), Session-End Review (MANDATORY), Adaptive Orchestrator, Predictive Loop, Post-Task Verification, Knowledge Export, Repair Pipeline",
       "definition": {
         "files": [
           {"path": "protocols/core/evolution.md", "action": "create"},

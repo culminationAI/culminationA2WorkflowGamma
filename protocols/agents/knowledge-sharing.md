@@ -99,6 +99,8 @@ curl -X POST http://localhost:8888/messages \
 
 ## Rules
 
+- **Dual-trigger priority:** When both knowledge-sharing and asset-exchange activate on the same event (e.g., new universal protocol created): asset-exchange (GitHub transport) is PRIMARY, knowledge-sharing (exchange message digest) is SECONDARY. Asset-exchange runs first for durable storage; knowledge-sharing sends a lightweight notification digest afterward. Both may run — they are complementary, not competing.
+
 1. Knowledge messages do NOT trigger `claude -p` in watcher — handled directly.
 2. Imports are ALWAYS queued for review — never auto-applied.
 3. Adopted corrections do NOT bump version (they are imports, not original corrections).

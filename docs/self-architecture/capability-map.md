@@ -1,11 +1,11 @@
 # Capability Map — FalkVelt (_follower_)
 
-**Version:** 1.65
+**Version:** 2.15
 **Coordinator:** FalkVelt (Style: closed/robotic, Role: follower)
 **Primary coordinator:** OkiAra (_primal_ at `/Users/eliahkadu/Desktop/_primal_`)
 **User:** Eliah (style=brief+detailed, priorities=quality+speed, language=Russian)
 **Repo:** culminationAI/culminationA2WorkflowGamma
-**Last scan:** 2026-03-03T03:30:00Z
+**Last scan:** 2026-03-03T19:00:00Z
 
 ---
 
@@ -112,8 +112,8 @@
 | Qdrant points | 10+ |
 | Garbage records | 0 |
 | Duplicates | 0 |
-| Neo4j nodes | 8 |
-| Neo4j relationships | 7 |
+| Neo4j nodes | ~66 |
+| Neo4j relationships | ~97 |
 | Orphan entities | 0 |
 | Embedding model | all-MiniLM-L6-v2 (384d) |
 
@@ -171,12 +171,12 @@
 |-------|--------|
 | All 4 agents in `.claude/agents/` | PASS — pathfinder, protocol-manager, engineer, llm-engineer |
 | All agents have routing in dispatcher.md | PASS (inherits standard dispatcher) |
-| All 20 protocols in protocols/ directory | PASS |
-| Protocol index in CLAUDE.md complete | PASS — 20 entries listed |
+| All 28 protocols in protocols/ directory | PASS |
+| Protocol index in CLAUDE.md complete | PASS — 28 entries listed |
 | MCP profile matches agent declarations | PASS — engineer(neo4j+qdrant), llm-engineer(github), all active |
 | FalkVelt node in Neo4j | PASS — version=1.0, style=closed, role=follower |
 | FOLLOWS->okiara in Neo4j | PASS |
-| Spec registry | 5 specs (v1.55) + 5 security specs in docs/specs/ |
+| Spec registry | 12 specs in docs/specs/ (7 IMPLEMENTED, 5 PROPOSED) |
 | request-history.json | ABSENT (expected — no sessions yet) |
 
 **Inconsistencies:** None.
