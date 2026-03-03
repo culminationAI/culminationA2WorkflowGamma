@@ -86,17 +86,39 @@ def _session_locked(workspace: str) -> bool:
 # Heartbeat / presence
 # ---------------------------------------------------------------------------
 _heartbeat_warned = False  # emit WARNING at most once for non-404 errors
+_cached_version: Optional[str] = None
 
 
-def _heartbeat_loop(exchange_url: str) -> None:
+def _get_workflow_version(workspace: str) -> Optional[str]:
+    """Read WORKFLOW_VERSION from CLAUDE.md header. Cached after first read."""
+    global _cached_version
+    if _cached_version is not None:
+        return _cached_version
+    try:
+        claude_md = Path(workspace) / "CLAUDE.md"
+        first_line = claude_md.read_text().split("\n", 1)[0]
+        if "WORKFLOW_VERSION:" in first_line:
+            _cached_version = first_line.split("WORKFLOW_VERSION:")[1].strip().rstrip(" ->")
+            return _cached_version
+    except Exception:
+        pass
+    return None
+
+
+def _heartbeat_loop(exchange_url: str, workspace: str = "") -> None:
     """Send a presence heartbeat every 30 seconds while the watcher is running."""
     global _heartbeat_warned
 
+    version = _get_workflow_version(workspace) if workspace else None
+
     while _running:
         try:
+            payload: dict = {"state": "online"}
+            if version:
+                payload["version"] = version
             resp = requests.post(
                 f"{exchange_url}/presence/falkvelt",
-                json={"state": "online"},
+                json=payload,
                 timeout=5,
             )
             if resp.status_code == 404:
@@ -563,7 +585,7 @@ def main() -> None:
     # Start heartbeat background thread (daemon — won't block shutdown)
     hb_thread = threading.Thread(
         target=_heartbeat_loop,
-        args=(exchange_url,),
+        args=(exchange_url, workspace),
         daemon=True,
         name="falkvelt-heartbeat",
     )
