@@ -11,6 +11,38 @@ Controlled by environment variables:
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+
+def _load_env_file() -> None:
+    """Auto-load secrets/.env if EMBEDDING_PROVIDER is not already set.
+
+    Finds secrets/.env relative to this script (two levels up from memory/scripts/).
+    Uses os.environ.setdefault so existing env vars are never overridden.
+    stdlib only — no python-dotenv required.
+    """
+    if os.environ.get("EMBEDDING_PROVIDER"):
+        return
+
+    env_path = Path(__file__).resolve().parent.parent.parent / "secrets" / ".env"
+    if not env_path.is_file():
+        return
+
+    with env_path.open() as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            if key:
+                os.environ.setdefault(key, value)
+
+
+_load_env_file()
 
 # --- Config ---
 EMBEDDING_PROVIDER = os.environ.get("EMBEDDING_PROVIDER", "fastembed")

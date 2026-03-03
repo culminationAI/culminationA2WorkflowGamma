@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -115,13 +116,18 @@ def http_get(url: str, timeout: int = 5) -> tuple[int, bytes]:
         raise
 
 
-def http_post(url: str, body: dict, timeout: int = 5) -> tuple[int, dict]:
+def http_post(
+    url: str,
+    body: dict,
+    timeout: int = 5,
+    auth: Optional[tuple[str, str]] = None,
+) -> tuple[int, dict]:
     data = json.dumps(body).encode()
-    req = urllib.request.Request(
-        url, data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if auth is not None:
+        credentials = base64.b64encode(f"{auth[0]}:{auth[1]}".encode()).decode()
+        headers["Authorization"] = f"Basic {credentials}"
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status, json.loads(resp.read())
@@ -193,7 +199,7 @@ def pose_pranayama() -> PoseResult:
     # Step 4: Vector search for test record
     try:
         result = subprocess.run(
-            ["python3", "memory/scripts/memory_search.py", "_yoga_test_ memory breath", "--limit", "3"],
+            ["python3", "memory/scripts/memory_search.py", "_yoga_test_ memory breath", "--limit", "3", "--user-id", "yoga"],
             capture_output=True, text=True, cwd=str(SOURCE_ROOT), timeout=30,
         )
         search_ok = False
@@ -222,10 +228,15 @@ def pose_pranayama() -> PoseResult:
 
     # Step 6: Neo4j fulltext index exists
     try:
+        neo4j_user = os.environ.get("NEO4J_USERNAME", "neo4j")
+        neo4j_pass = os.environ.get("NEO4J_PASSWORD", "workflow")
+        neo4j_http_port = os.environ.get("NEO4J_HTTP_PORT", "7474")
+        neo4j_url = f"http://localhost:{neo4j_http_port}/db/neo4j/tx/commit"
         status_code, response = http_post(
-            "http://localhost:7474/db/neo4j/tx/commit",
+            neo4j_url,
             {"statements": [{"statement": "SHOW INDEXES YIELD name WHERE name = 'memory_fulltext' RETURN name"}]},
             timeout=8,
+            auth=(neo4j_user, neo4j_pass),
         )
         if status_code == 200:
             results = response.get("results", [])

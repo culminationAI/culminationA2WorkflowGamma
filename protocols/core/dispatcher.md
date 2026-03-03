@@ -95,12 +95,9 @@ For T3+ requests, gap analysis runs IN PARALLEL with task dispatch — never blo
 
 ### Domain agents (created during initialization)
 
-| Domain | Subagent |
-|--------|----------|
-| Workflow pattern research, multi-agent orchestration analysis, framework design patterns | workflow-researcher |
-| Technical documentation, API docs, architecture docs, user guides | docs-writer |
-
-> When routing, check `.claude/agents/` for available domain agents beyond the base four.
+> No domain agents created for this workspace. Domain agents are project-specific
+> and created during initialization Phase 4 based on project archetype.
+> Check `.claude/agents/` for available agents beyond the base four.
 
 ## Command Routing
 
