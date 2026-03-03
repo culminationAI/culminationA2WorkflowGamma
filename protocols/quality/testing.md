@@ -37,20 +37,20 @@ Scale: 0-100 total.
 - T05: Search for a pattern across codebase (T1)
 
 ### Wave 2: Single-Agent Tasks (T3)
-5 tests, routing validation:
-- T06: Write a new utility function (engineer)
-- T07: Analyze a character's psychology (narrative-designer)
-- T08: Design a database schema (data-architect)
-- T09: Research a scientific topic (science-researcher)
-- T10: Optimize a prompt (llm-engineer)
+5 tests, routing validation — base agents only:
+- T06: Write a new utility script (engineer)
+- T07: Optimize a system prompt for a new agent (llm-engineer)
+- T08: Explore codebase architecture and produce a report (pathfinder)
+- T09: Create a new protocol for a detected workflow pattern (protocol-manager)
+- T10: Design a context engineering strategy for a complex task (llm-engineer)
 
 ### Wave 3: Multi-Agent Chains (T4)
-5 tests, handoff validation:
-- T11: New component end-to-end (narrative → data → engineer)
-- T12: Knowledge domain research (parallel researchers → curator)
-- T13: Bug diagnosis and fix (engineer → data-architect → engineer)
-- T14: Prompt + implementation (llm-engineer → engineer)
-- T15: Cross-domain synthesis (parallel researchers → synthesis)
+5 tests, handoff validation — base agent chains:
+- T11: Explore codebase then implement fix (pathfinder → engineer)
+- T12: Design agent prompt then verify routing logic (llm-engineer → protocol-manager)
+- T13: Search memory for stale records then patch (pathfinder → engineer)
+- T14: Audit protocols then update index (pathfinder → protocol-manager)
+- T15: Run gap analysis then design new agent spec (pathfinder → llm-engineer)
 
 ### Wave 4: Full Pipeline (T4-T5)
 5 tests, full system:

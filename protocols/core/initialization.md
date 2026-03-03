@@ -315,6 +315,7 @@ Workflow graduates from version 0.2 → 1.0:
    d. Store: `{type: "build_up", subtype: "self_architecture_initialized"}`
 5. Coordinator synthesizes: generate build-up report, apply any improvements
 6. Update CLAUDE.md: change `<!-- WORKFLOW_VERSION: 0.2 -->` to `<!-- WORKFLOW_VERSION: 1.0 -->`
+   **Version guard:** Only set version to 1.0 if WORKFLOW_VERSION is currently 0.2 (fresh install). If version is already >= 1.0 (brain import via cloning protocol), preserve the existing version — do not downgrade.
 7. Store initialization record in memory: `{type: "build_up", subtype: "initialization"}`
 
 ### Phase 11: Planning
