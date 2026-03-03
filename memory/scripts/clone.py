@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Clone the coordinator brain to a new repository or directory.
+"""Clone the coordinator instance to a new repository or directory.
 
-Creates a blank-but-self-aware copy: full evolved brain (protocols, agents,
+Creates a blank-but-self-aware copy: full evolved instance (protocols, agents,
 memory scripts) but requires fresh initialization (onboarding).
 
 Usage:
@@ -44,10 +44,10 @@ def is_github_target(target: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Brain manifest
+# Instance manifest
 # ---------------------------------------------------------------------------
 
-def get_brain_manifest(source_root: Path) -> list[Path]:
+def get_instance_manifest(source_root: Path) -> list[Path]:
     """Return list of relative Paths to include in the clone.
 
     Walks INCLUDE patterns, then filters out EXCLUDE patterns.
@@ -219,7 +219,7 @@ def transform_build_registry(source_version: str) -> str:
                 "to_version": "1.0",
                 "timestamp": now,
                 "changes": [
-                    f"Brain imported from coordinator v{source_version}",
+                    f"Instance imported from coordinator v{source_version}",
                     "Fresh initialization required",
                 ],
                 "status": "pending",
@@ -346,7 +346,7 @@ def clone_to_github(
     dry_run: bool,
     source_version: str,
 ) -> None:
-    """Clone brain to a new private GitHub repository."""
+    """Clone instance to a new private GitHub repository."""
     if not shutil.which("gh"):
         print("[ERROR] GitHub CLI (gh) not found. Install it: https://cli.github.com/", file=sys.stderr)
         sys.exit(1)
@@ -356,7 +356,7 @@ def clone_to_github(
     print(f"Files:   {len(manifest)} in manifest")
     print()
 
-    with tempfile.TemporaryDirectory(prefix="brain-clone-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="instance-clone-") as tmp:
         tmp_path = Path(tmp)
 
         if dry_run:
@@ -364,7 +364,7 @@ def clone_to_github(
             copy_with_transforms(source_root, tmp_path, manifest, dry_run=True, source_version=source_version)
             print()
             print(f"[DRY RUN] Would create GitHub repo: {target} (private)")
-            print(f"[DRY RUN] Would push with commit: chore: initial brain import from coordinator v{source_version}")
+            print(f"[DRY RUN] Would push with commit: chore: initial instance import from coordinator v{source_version}")
             return
 
         print("Copying files...")
@@ -375,7 +375,7 @@ def clone_to_github(
         subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
         subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True, text=True)
         subprocess.run(
-            ["git", "commit", "-m", f"chore: initial brain import from coordinator v{source_version}"],
+            ["git", "commit", "-m", f"chore: initial instance import from coordinator v{source_version}"],
             cwd=tmp_path,
             check=True,
             capture_output=True,
@@ -405,7 +405,7 @@ def clone_to_local(
     init_git: bool,
     source_version: str,
 ) -> None:
-    """Clone brain to a local directory."""
+    """Clone instance to a local directory."""
     target_dir = Path(target).expanduser().resolve()
 
     print(f"Target:  {target_dir} (local)")
@@ -437,7 +437,7 @@ def clone_to_local(
         subprocess.run(["git", "init"], cwd=target_dir, check=True, capture_output=True, text=True)
         subprocess.run(["git", "add", "."], cwd=target_dir, check=True, capture_output=True, text=True)
         subprocess.run(
-            ["git", "commit", "-m", f"chore: initial brain import from coordinator v{source_version}"],
+            ["git", "commit", "-m", f"chore: initial instance import from coordinator v{source_version}"],
             cwd=target_dir,
             check=True,
             capture_output=True,
@@ -519,7 +519,7 @@ def verify_clone(target_dir: Path) -> list[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Clone coordinator brain to a new GitHub repo or local directory.",
+        description="Clone coordinator instance to a new GitHub repo or local directory.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
@@ -547,7 +547,7 @@ def main() -> None:
 
     source_root = get_source_root()
     source_version = get_source_version(source_root)
-    manifest = get_brain_manifest(source_root)
+    manifest = get_instance_manifest(source_root)
 
     github_target = is_github_target(args.target)
 

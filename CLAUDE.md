@@ -1,4 +1,4 @@
-<!-- WORKFLOW_VERSION: 2.96 -->
+<!-- WORKFLOW_VERSION: 2.97 -->
 
 # CLAUDE.md — Main Workspace
 
@@ -173,7 +173,7 @@ Persistent learning file `user-identity.md` in workspace root. Created during in
 
 Three-tier storage model:
 1. **Official repo** (`culminationAI/culminationA2Workflow`) — canonical version + community specs
-2. **Personal repo** (user's, e.g. `user/my-agent`) — evolved brain + personal specs
+2. **Personal repo** (user's, e.g. `user/my-agent`) — evolved instance + personal specs
 3. **Project-local** — agent running inside a specific project
 
 Storage mode set during initialization Phase 9. If mode = "repo":

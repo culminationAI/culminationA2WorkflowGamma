@@ -178,11 +178,11 @@ Push myself to personal repository after build-up, if storage mode is "repo".
 1. `git fetch origin` (personal repo, not project repo)
 2. Compare versions: `local_version` vs `remote_version` (read from remote CLAUDE.md)
    - If remote > local:
-     WARN to user: "Your brain repo has a newer version (v{remote}). Another project may have evolved it. Pull first? (yes/no)"
+     WARN to user: "Your instance repo has a newer version (v{remote}). Another project may have evolved it. Pull first? (yes/no)"
      If yes → `git pull --rebase`, re-read CLAUDE.md, continue
      If no → abort sync, log warning
    - If local >= remote → proceed
-3. Collect core brain files:
+3. Collect core instance files:
    - CLAUDE.md, `.claude/agents/` (base only), `protocols/core|agents|knowledge|quality/`
    - `docs/self-architecture/`, `specs/`, `memory/scripts/`, `mcp/`
    - `setup.sh`, `install.sh`, `.gitignore`, `README.md`

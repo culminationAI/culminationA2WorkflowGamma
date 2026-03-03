@@ -2,7 +2,7 @@
 
 ## Overview
 
-Reproduces the coordinator as a blank-but-self-aware instance in a new workspace. The clone receives the full evolved brain (protocols, agents, memory scripts, MCP templates) but goes through initialization fresh — new name, new project context, new user identity.
+Reproduces the coordinator as a blank-but-self-aware instance in a new workspace. The clone receives the full evolved instance (protocols, agents, memory scripts, MCP templates) but goes through initialization fresh — new name, new project context, new user identity.
 
 This is NOT variant testing (see `protocols/core/build-up.md` Steps 3-4 for worktree-based variant testing).
 
@@ -15,12 +15,12 @@ This is NOT variant testing (see `protocols/core/build-up.md` Steps 3-4 for work
 
 - **Source** — the running coordinator workspace
 - **Clone** — the new coordinator instance being created
-- **Brain files** — transferable coordinator knowledge (protocols, agents, scripts)
+- **Instance files** — transferable coordinator knowledge (protocols, agents, scripts)
 - **Runtime data** — non-transferable state (memories, secrets, user identity, logs)
 
-## Brain vs Runtime
+## Instance vs Runtime
 
-### Cloned (brain files)
+### Cloned (instance files)
 
 ```
 CLAUDE.md                                    (transformed — see Step 4)
@@ -75,7 +75,7 @@ evolve/
 
 Target format: `owner/repo-name`
 
-Creates a new private GitHub repo, pushes the brain as initial commit. Requires `gh` CLI authenticated.
+Creates a new private GitHub repo, pushes the instance as initial commit. Requires `gh` CLI authenticated.
 
 ```bash
 python3 memory/scripts/clone.py owner/repo-name
@@ -85,7 +85,7 @@ python3 memory/scripts/clone.py owner/repo-name
 
 Target format: `/path/to/directory`
 
-Copies brain files to a local directory. Optional `--init-git` to initialize a git repo.
+Copies instance files to a local directory. Optional `--init-git` to initialize a git repo.
 
 ```bash
 python3 memory/scripts/clone.py /path/to/directory
@@ -107,9 +107,9 @@ Detect mode from target string:
 - Contains `/` but does NOT start with `/` → GitHub (`owner/repo`)
 - Starts with `/` or `.` → local directory
 
-### Step 3: Assemble Brain Files
+### Step 3: Assemble Instance Files
 
-Collect all files from the include list (see Brain vs Runtime above). Skip files that don't exist in source. For directories, collect recursively.
+Collect all files from the include list (see Instance vs Runtime above). Skip files that don't exist in source. For directories, collect recursively.
 
 ### Step 4: Apply Transformations
 
@@ -117,12 +117,12 @@ Three files are modified before writing to clone:
 
 **CLAUDE.md:**
 - Insert `<!-- _WORKFLOW_NEEDS_INIT -->` marker before `## Role`
-- Keep existing `<!-- WORKFLOW_VERSION: X.XX -->` (brain maturity indicator)
+- Keep existing `<!-- WORKFLOW_VERSION: X.XX -->` (instance maturity indicator)
 - The clone's initialization Phase 2 Step 3 will assign a new name
 
 **build-registry.json:**
 - Replace with minimal stub: 1 entry, type=initialization, status=pending
-- Records clone origin: "Brain imported from coordinator vX.XX"
+- Records clone origin: "Instance imported from coordinator vX.XX"
 
 **knowledge-exchange-accord.md:**
 - Status: ACTIVE → Status: TEMPLATE
@@ -138,13 +138,13 @@ Copy all collected files to target, applying transformations. Create parent dire
 
 **GitHub mode:**
 ```bash
-git init && git add . && git commit -m "chore: initial brain import from coordinator vX.XX"
+git init && git add . && git commit -m "chore: initial instance import from coordinator vX.XX"
 gh repo create owner/repo --private --source . --push
 ```
 
 **Local mode (with --init-git):**
 ```bash
-git init && git add . && git commit -m "chore: initial brain import from coordinator vX.XX"
+git init && git add . && git commit -m "chore: initial instance import from coordinator vX.XX"
 ```
 
 Print next steps:
@@ -172,7 +172,7 @@ Automated checks (8 total):
 1. Clone opens in Claude Code → CLAUDE.md loaded → `_WORKFLOW_NEEDS_INIT` detected
 2. Initialization protocol runs all 11 phases
 3. Phase 2: clone gets a NEW name (generated via `generate_name.py`)
-4. WORKFLOW_VERSION stays at source level (e.g. 2.35) — brain maturity preserved
+4. WORKFLOW_VERSION stays at source level (e.g. 2.35) — instance maturity preserved
 5. Phase 10: version NOT reset to 1.0 (guard: only 0.2 → 1.0 for fresh installs)
 6. After init: clone is a fully autonomous coordinator with its own identity
 
