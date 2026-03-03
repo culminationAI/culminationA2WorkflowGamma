@@ -1,3 +1,20 @@
 {
-  "entries": []
+  "entries": [
+    {
+      "id": "req-2026-03-03-1835-001",
+      "timestamp": "2026-03-03T18:35:06.665540+00:00",
+      "tier": "T3",
+      "verb": "create",
+      "domain": "evolution",
+      "subagents_used": [
+        "engineer"
+      ],
+      "task_summary": "Created request_history.py for T3+ dispatch tracking",
+      "gap_detected": false,
+      "gap_severity": null,
+      "build_used": null,
+      "outcome": "success",
+      "phase_hint": "IMPLEMENTATION"
+    }
+  ]
 }

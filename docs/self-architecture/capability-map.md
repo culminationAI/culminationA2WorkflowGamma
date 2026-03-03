@@ -1,6 +1,6 @@
 # Capability Map — FalkVelt (_follower_)
 
-**Version:** 2.66
+**Version:** 2.96
 **Coordinator:** FalkVelt (Style: closed/robotic, Role: follower)
 **Primary coordinator:** OkiAra (_primal_ at `/Users/eliahkadu/Desktop/_primal_`)
 **User:** Eliah (style=brief+detailed, priorities=quality+speed, language=Russian)

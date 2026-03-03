@@ -1,4 +1,4 @@
-<!-- WORKFLOW_VERSION: 2.76 -->
+<!-- WORKFLOW_VERSION: 2.96 -->
 
 # CLAUDE.md — Main Workspace
 
@@ -63,7 +63,11 @@ project-root/               <- you are here (workspace root)
 3. Search memories: `python3 memory/scripts/memory_search.py "active tasks blockers"`
 4. Read active plans if working on a specific project
 5. Lightweight gap analysis: check `docs/self-architecture/capability-map.md` freshness + `docs/self-architecture/build-registry.json` build TTLs (see `protocols/core/gap-analysis.md`)
-6. If active build TTL expiring within 2 days/sessions → warn user
+6. TTL check for active builds:
+   ```bash
+   python3 memory/scripts/ttl_check.py
+   ```
+   If warnings/expired → inform user, suggest deactivation.
 7. Initialize evolution tracking: reset `_corrections_this_session=0`, `_correction_log=[]`, `_session_gaps=[]`, `_t3plus_count=0`, `_repair_queue=[]`, `_repairs_this_session=0`, `_repair_log=[]` (see `protocols/core/evolution.md`)
 8. Session lock for watcher: `touch .session_lock` (prevents live responder from processing messages while coordinator is active)
 9. Check exchange + triage:
@@ -81,7 +85,13 @@ project-root/               <- you are here (workspace root)
    - Informational messages → PATCH status='read' → store to memory
    - Process accepted messages during session → PATCH status='processed' when done
 9.5. Repair check: read latest meditation entry in `docs/self-architecture/meditation-log.md`. If unresolved P0-P2 recommendations exist → inform user: "N repair items pending (P0: X, P1: Y, P2: Z). Run /repair to fix." Initialize `_repair_queue`, `_repairs_this_session=0`, `_repair_log=[]`.
-10. On session end: run Evolution Session-End Review (`protocols/core/evolution.md` Hook 2) BEFORE removing session lock
+10. Session-End Review (MANDATORY before removing lock):
+    a. Count corrections this session (check `_correction_log`)
+    b. Verify all corrections stored: `python3 memory/scripts/memory_search.py "build_up correction" --limit 20`
+    c. Check request history was populated: `python3 memory/scripts/request_history.py --stats`
+    d. If MISSED corrections → run quick-path build-up NOW
+    e. Report to user: corrections given/stored, T3+ tasks tracked, gaps detected
+    f. Batch-export unexported universal corrections via exchange (Hook 6)
 11. Remove session lock: `rm -f .session_lock` (re-enables live responder)
 
 ## Subagents (Working Workflow)
@@ -116,6 +126,16 @@ Classify EVERY request before execution:
 <!-- /IMMUTABLE -->
 
 Start response with `[T{n}]` marker.
+
+## Post-Dispatch (T3+ only)
+
+After every T3+ subagent completes:
+1. Verify `files_changed` exist (Glob)
+2. Store result to memory (MANDATORY — search for dupes first)
+3. Append request history:
+   ```bash
+   python3 memory/scripts/request_history.py --tier T{n} --verb "{verb}" --domain "{domain}" --agents "{agent}" --summary "{summary}" --outcome {success|partial|failed}
+   ```
 
 ## Memory Protocol
 

@@ -6,10 +6,15 @@
       "from_version": "0.2",
       "to_version": "1.0",
       "timestamp": "2026-03-03T02:00:00Z",
-      "changes": ["Full initialization by OkiAra (automated)", "4 base agents", "18 protocols", "6 MCP servers", "Shared infra with _primal_"],
+      "changes": [
+        "Full initialization by OkiAra (automated)",
+        "4 base agents",
+        "18 protocols",
+        "6 MCP servers",
+        "Shared infra with _primal_"
+      ],
       "status": "completed"
-    }
-    ,
+    },
     {
       "id": "build-2026-03-03-session1",
       "created": "2026-03-03T03:30:00Z",
@@ -19,8 +24,8 @@
       "state": "active",
       "ttl_sessions": 10,
       "ttl_days": 14,
-      "sessions_since_last_use": 0,
-      "last_used": "2026-03-03T03:30:00Z",
+      "sessions_since_last_use": 3,
+      "last_used": "2026-03-03",
       "activated_at": "2026-03-03T03:30:00Z",
       "deactivated_at": null,
       "smoke_test_results": "retroactive — components already verified in production",
@@ -35,25 +40,59 @@
       "components": {
         "agents": [],
         "protocols": [
-          {"action": "create", "path": "protocols/core/evolution.md", "description": "Evolution orchestration (6 hooks)"},
-          {"action": "create", "path": "protocols/agents/knowledge-sharing.md", "description": "Inter-agent knowledge exchange"},
-          {"action": "create", "path": "protocols/agents/inter-agent-exchange.md", "description": "Exchange message protocol"}
+          {
+            "action": "create",
+            "path": "protocols/core/evolution.md",
+            "description": "Evolution orchestration (6 hooks)"
+          },
+          {
+            "action": "create",
+            "path": "protocols/agents/knowledge-sharing.md",
+            "description": "Inter-agent knowledge exchange"
+          },
+          {
+            "action": "create",
+            "path": "protocols/agents/inter-agent-exchange.md",
+            "description": "Exchange message protocol"
+          }
         ],
         "claude_md_rules": [
-          {"action": "add", "section": "Session Start", "rule_text": "Step 7: Init evolution variables, Step 10: Session-End Review"},
-          {"action": "add", "section": "Protocols", "rule_text": "Evolution + Knowledge Sharing rows"}
+          {
+            "action": "add",
+            "section": "Session Start",
+            "rule_text": "Step 7: Init evolution variables, Step 10: Session-End Review"
+          },
+          {
+            "action": "add",
+            "section": "Protocols",
+            "rule_text": "Evolution + Knowledge Sharing rows"
+          }
         ],
-        "mcp_profile": {"action": "none"},
+        "mcp_profile": {
+          "action": "none"
+        },
         "memory_records": [
-          {"text": "Build-up: exchange responder + evolution + knowledge sharing created in session 1", "metadata": {"type": "build_up", "subtype": "build_context"}}
+          {
+            "text": "Build-up: exchange responder + evolution + knowledge sharing created in session 1",
+            "metadata": {
+              "type": "build_up",
+              "subtype": "build_context"
+            }
+          }
         ]
       },
       "rollback": {
         "agents_to_delete": [],
         "agents_to_restore": [],
-        "protocols_to_delete": ["protocols/core/evolution.md", "protocols/agents/knowledge-sharing.md"],
+        "protocols_to_delete": [
+          "protocols/core/evolution.md",
+          "protocols/agents/knowledge-sharing.md"
+        ],
         "protocols_to_restore": [],
-        "claude_md_rules_to_remove": ["Evolution session variables", "Knowledge Sharing protocol entry"],
+        "claude_md_rules_to_remove": [
+          "Evolution session variables",
+          "Knowledge Sharing protocol entry"
+        ],
         "claude_md_rules_to_restore": [],
         "mcp_profile_to_restore": null
       }

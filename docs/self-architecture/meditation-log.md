@@ -390,3 +390,248 @@
   ]
 }
 ```
+
+---
+
+## Session 4 — 2026-03-03 | Quick | Integrity: 0.68 | Retreat Cycle 1
+
+```json
+{
+  "meditation_id": "med-2026-03-03-R1",
+  "timestamp": "2026-03-03T21:00:00Z",
+  "intensity": "quick",
+  "phases_executed": [1, 2, 6],
+  "context": "retreat_cycle_1",
+  "baseline": {
+    "version": "2.76",
+    "agents": 4,
+    "protocols": 31,
+    "specs": {"implemented": 7, "proposed": 5, "total": 12},
+    "neo4j_version": "2.05",
+    "neo4j_relations": 39
+  },
+  "integrity_score": {
+    "overall": 0.68,
+    "dimensions": {
+      "agent_coherence": 1.0,
+      "protocol_coherence": 0.55,
+      "spec_coherence": 0.85,
+      "memory_integrity": 0.75,
+      "build_health": 0.50,
+      "connection_density": 0.65,
+      "version_alignment": 0.20
+    }
+  },
+  "findings": {
+    "version_mismatches": [
+      {"location": "Neo4j VERSION node", "expected": "2.76", "actual": "2.05", "priority": "P0"},
+      {"location": "capability-map.md header", "expected": "2.76", "actual": "2.66", "priority": "P2"}
+    ],
+    "graph_issues": [
+      {"type": "missing_edges", "count": 11, "description": "11 protocols missing OWNS_PROTOCOL edges", "priority": "P1"},
+      {"type": "status_mismatch", "spec": "spec-asset-exchange", "neo4j": "REALIZED", "registry": "IMPLEMENTED", "priority": "P2"}
+    ],
+    "index_issues": [
+      {"type": "missing_from_claude_md", "protocol": "yoga.md", "priority": "P1"}
+    ],
+    "behavioral_issues": [
+      {"id": "SC-010", "description": "sessions_since_last_use counter never incremented", "priority": "P2", "route": "build-up"}
+    ]
+  },
+  "recommendations": [
+    {"priority": "P0", "action": "Sync Neo4j VERSION node to 2.76", "category": "version_sync"},
+    {"priority": "P1", "action": "Create 11 missing OWNS_PROTOCOL edges in Neo4j", "category": "graph_repair"},
+    {"priority": "P1", "action": "Add yoga.md to CLAUDE.md protocol index table", "category": "index_repair"},
+    {"priority": "P2", "action": "Sync capability-map.md version to 2.76", "category": "version_sync"},
+    {"priority": "P2", "action": "Fix spec-asset-exchange status in Neo4j: REALIZED to IMPLEMENTED", "category": "graph_repair"},
+    {"priority": "P2", "action": "SC-010: implement sessions_since_last_use increment (behavioral, route to build-up)", "category": "behavioral"}
+  ]
+}
+```
+
+---
+
+## Session 5 — 2026-03-03 | Quick | Integrity: 0.86 | Retreat Cycle 2
+
+```json
+{
+  "meditation_id": "med-2026-03-03-R2",
+  "timestamp": "2026-03-03T21:05:00Z",
+  "intensity": "quick",
+  "phases_executed": [1, 2, 6],
+  "context": "retreat_cycle_2",
+  "baseline": {
+    "version": "2.76",
+    "agents": 4,
+    "protocols": 31,
+    "specs": {"implemented": 7, "proposed": 5, "total": 12},
+    "neo4j_version": "2.76",
+    "neo4j_relations": 50,
+    "neo4j_protocol_edges": 31
+  },
+  "integrity_score": {
+    "overall": 0.86,
+    "dimensions": {
+      "agent_coherence": 1.0,
+      "protocol_coherence": 0.95,
+      "spec_coherence": 0.90,
+      "memory_integrity": 0.75,
+      "build_health": 0.50,
+      "connection_density": 0.75,
+      "version_alignment": 1.0
+    }
+  },
+  "findings": {
+    "resolved_since_last": [
+      "Neo4j VERSION node synced to 2.76 (was 2.05)",
+      "coordinator_identity.version synced to 2.76 (was 2.05)",
+      "capability-map.md version synced to 2.76 (was 2.66)",
+      "11 missing OWNS_PROTOCOL edges created (29→31)",
+      "spec-asset-exchange status fixed: REALIZED→IMPLEMENTED"
+    ],
+    "remaining_issues": [
+      {"id": "SC-010", "description": "sessions_since_last_use counter never incremented at session start", "priority": "P2", "route": "build-up", "category": "behavioral"},
+      {"id": "ML-HIST", "description": "Historical P0 items in meditation-log.md still counted by yoga (append-only log)", "priority": "P3", "route": "self-healing enhancement", "category": "tooling"}
+    ]
+  },
+  "recommendations": [
+    {"priority": "P2", "action": "SC-010: implement sessions_since_last_use counter via build-up", "category": "behavioral"},
+    {"priority": "P3", "action": "Enhance yoga.py to cross-reference self-healing memory for resolved items", "category": "tooling"}
+  ]
+}
+```
+
+---
+
+## Session 6 — 2026-03-03 | Quick | Integrity: 0.76 | Retreat #2 Cycle 1 (Pipeline-Focused)
+
+```json
+{
+  "meditation_id": "med-2026-03-03-R2C1",
+  "timestamp": "2026-03-03T22:30:00Z",
+  "intensity": "quick",
+  "phases_executed": [1, 2, 6],
+  "context": "retreat_2_cycle_1_pipeline_focused",
+  "focus": ["build-up pipeline", "self-build-up pipeline", "evolution pipeline", "spec acquisition pipeline"],
+  "baseline": {
+    "version": "2.86",
+    "agents": 4,
+    "protocols": 31,
+    "specs": {"implemented": 7, "proposed": 5, "total": 12},
+    "neo4j_version": "2.86 (coordinator_identity)",
+    "neo4j_VERSION_node": "MISSING",
+    "neo4j_relations": "50+",
+    "neo4j_protocol_edges": 25,
+    "request_history_entries": 0,
+    "active_clones": 0,
+    "buffered_builds": 0
+  },
+
+  "integrity_score": {
+    "overall": 0.76,
+    "dimensions": {
+      "agent_coherence": {"score": 1.00, "note": "4 agents operational"},
+      "protocol_coherence": {"score": 0.81, "note": "25/31 OWNS_PROTOCOL edges. 6 missing: evolution, self-build-up, knowledge-sharing, feedback-dialogue, self-healing, yoga. Meditation path wrong in Neo4j."},
+      "spec_coherence": {"score": 0.85, "note": "11 specs in registry. spec-asset-exchange status REALIZED in Neo4j (should be IMPLEMENTED). Was 'fixed' in retreat #1 but reverted."},
+      "memory_integrity": {"score": 0.75, "note": "Functional. Some legacy issues persist."},
+      "build_health": {"score": 0.55, "note": "ttl_check.py working. 1 real build + 1 retroactive. Full path never exercised."},
+      "connection_density": {"score": 0.70, "note": "50+ relations. Missing protocol edges reduce density."},
+      "version_alignment": {"score": 0.90, "note": "2.86 consistent in CLAUDE.md, coordinator_identity, capability-map. VERSION node MISSING from Neo4j."},
+      "pipeline_health": {"score": 0.55, "note": "NEW DIMENSION for this retreat. Build-up quick=FLOWING, full=STUB. Self-build-up=PARTIAL. Evolution hooks 3-4=BLOCKED. Spec acquisition=PARTIAL."}
+    }
+  },
+
+  "pipeline_analysis": {
+    "build_up_pipeline": {
+      "overall": "PARTIAL",
+      "score": 0.55,
+      "quick_path": "FLOWING",
+      "full_path": "STUB",
+      "steps": {
+        "detect_hook1": "FLOWING — Correction Interceptor defined, BLOCKING",
+        "classify": "FLOWING — quick/full classification rules clear",
+        "clone": "STUB — evolve/ exists, active-clones.json empty, never exercised",
+        "implement": "STUB — dependent on cloning",
+        "test": "STUB — test-logs/.gitkeep exists, no test framework",
+        "evaluate": "STUB — variant comparison never done",
+        "backup": "PARTIAL — git available, no build-up backup history",
+        "transform_security_gate": "FLOWING — security gate documented, protected files list clear",
+        "store_memory": "FLOWING — demonstrated",
+        "version_bump": "FLOWING — demonstrated 2.76→2.86",
+        "sync_conditional": "PARTIAL — storage mode check needed"
+      },
+      "bottleneck": "Steps 3-6 (clone → evaluate) are entirely STUB. Full path has never been tested end-to-end."
+    },
+
+    "self_build_up_pipeline": {
+      "overall": "PARTIAL",
+      "score": 0.50,
+      "phases": {
+        "explore": "FLOWING — pathfinder operational, can scan architecture",
+        "gap_analysis": "PARTIAL — capability-map exists, no automated gap scoring script",
+        "decision_fork": "STUB — KNOWLEDGE vs STRUCTURAL classification never triggered",
+        "build_creation": "PARTIAL — 2 entries in registry, session1 was retroactive (not pipeline-created)",
+        "spec_check_4a_pre": "FLOWING — spec-registry.json operational with 11 specs",
+        "security_gate": "FLOWING — same as build-up Step 8",
+        "smoke_test": "STUB — no smoke test framework exists",
+        "lifecycle_ttl": "FLOWING — ttl_check.py created and integrated"
+      },
+      "bottleneck": "Phase 3 (Decision Fork) never triggered. Phase 6 (Smoke Test) has no implementation. Only Phase 7 (lifecycle) is truly production-tested."
+    },
+
+    "evolution_pipeline": {
+      "overall": "PARTIAL",
+      "score": 0.45,
+      "hooks": {
+        "hook1_correction_interceptor": {"status": "PARTIAL", "note": "Defined as BLOCKING, referenced in CLAUDE.md. Session variables are conceptual (in-memory, no persistence). Has been exercised."},
+        "hook2_session_end_review": {"status": "PARTIAL", "note": "In CLAUDE.md step 10. Execution depends on coordinator remembering to run it. No automation or enforcement."},
+        "hook3_adaptive_orchestrator": {"status": "BLOCKED", "note": "Scoring table exists. REQUIRES buffered builds (0 exist) or available specs to score. Never tested."},
+        "hook4_predictive_loop": {"status": "BLOCKED", "note": "REQUIRES request-history.json entries >= 10 AND count % 10 == 0. Currently 0 entries. Pipeline CANNOT fire."},
+        "hook5_post_task_verification": {"status": "PARTIAL", "note": "Correction check works. Request-history append (step 3) broken — empty file. Predictive trigger (step 4) dead."},
+        "hook6_knowledge_export": {"status": "FLOWING", "note": "Demonstrated with OkiAra exchange. Universal corrections exported successfully."},
+        "hook7_repair_pipeline": {"status": "FLOWING", "note": "self-healing.py exists. Retreat demonstrated it working. Categories functional."}
+      },
+      "bottleneck": "Hooks 3-4 BLOCKED by missing prerequisites (buffered builds, request history). Evolution currently operates at 2/7 hooks = 29% capacity."
+    },
+
+    "spec_acquisition_pipeline": {
+      "overall": "PARTIAL",
+      "score": 0.70,
+      "steps": {
+        "propose": "FLOWING — 11 specs in registry, domain_map organized",
+        "write_spec_file": "PARTIAL — only 4/11 have spec_file paths (PROPOSED ones). IMPLEMENTED specs have null spec_file",
+        "register": "FLOWING — spec-registry.json well-structured with full metadata",
+        "neo4j_sync": "PARTIAL — OWNS_SPEC edges exist. spec-asset-exchange status mismatch persists. No automated sync script.",
+        "asset_exchange_share": "FLOWING — demonstrated with OkiAra"
+      },
+      "bottleneck": "No automated spec→Neo4j sync. Status mismatches can persist across retreats (demonstrated: REALIZED not fixed)."
+    }
+  },
+
+  "findings": {
+    "infrastructure_regressions": [
+      {"id": "REG-001", "priority": "P1", "description": "VERSION node MISSING from Neo4j — was set in retreat #1, now absent", "category": "graph_repair"},
+      {"id": "REG-002", "priority": "P1", "description": "spec-asset-exchange status STILL REALIZED — retreat #1 fix to IMPLEMENTED did not persist", "category": "graph_repair"},
+      {"id": "REG-003", "priority": "P1", "description": "6 OWNS_PROTOCOL edges missing — retreat #1 claimed 31/31 but actual is 25/31", "category": "graph_repair"}
+    ],
+    "pipeline_blockers": [
+      {"id": "PB-001", "priority": "P1", "description": "request-history.json empty — blocks Evolution Hook 4 (Predictive) and Hook 5 step 3 (request tracking)", "category": "behavioral"},
+      {"id": "PB-002", "priority": "P2", "description": "No buffered builds — blocks Evolution Hook 3 (Adaptive Orchestrator)", "category": "lifecycle"},
+      {"id": "PB-003", "priority": "P2", "description": "Full build-up path (Steps 3-6) never tested — cloning/testing/evaluation are STUB", "category": "testing"},
+      {"id": "PB-004", "priority": "P2", "description": "Self-build-up smoke test (Phase 6) has no implementation framework", "category": "testing"}
+    ],
+    "path_mismatches": [
+      {"id": "PM-001", "priority": "P2", "description": "Neo4j meditation protocol path: protocols/quality/meditation.md — actual: protocols/core/meditation.md", "category": "graph_repair"}
+    ]
+  },
+
+  "recommendations": [
+    {"priority": "P1", "action": "Fix 3 regressions: recreate VERSION node, fix spec-asset-exchange status, add 6 missing OWNS_PROTOCOL edges", "category": "graph_repair"},
+    {"priority": "P1", "action": "Start populating request-history.json — implement Hook 5 step 3 (dispatcher Post-Dispatch append) to unblock Hooks 4+5", "category": "behavioral"},
+    {"priority": "P2", "action": "Fix meditation protocol path in Neo4j: quality→core", "category": "graph_repair"},
+    {"priority": "P2", "action": "Design smoke test framework for self-build-up Phase 6 (even minimal: 3 checkpoints)", "category": "testing"},
+    {"priority": "P3", "action": "Run a test build-up through full path (Steps 3-6) to validate cloning infrastructure", "category": "testing"},
+    {"priority": "P3", "action": "Create at least one build with TTL, use it, then deactivate→buffer to enable Hook 3 testing", "category": "lifecycle"}
+  ]
+}
+```

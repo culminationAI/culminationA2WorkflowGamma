@@ -1,7 +1,7 @@
-# Yoga Report — 2026-03-03 17:44:33
+# Yoga Report — 2026-03-03 21:24:11
 
-**Flexibility Score:** 67%
-**Poses:** 2 FLOWING / 1 PARTIAL / 0 BLOCKED
+**Flexibility Score:** 100%
+**Poses:** 3 FLOWING / 0 PARTIAL / 0 BLOCKED
 
 ---
 
@@ -11,28 +11,27 @@
 | Step | Status | Detail |
 |------|--------|--------|
 | Embedding service (Ollama) reachable | PASS | HTTP 200 |
-| Qdrant reachable | PASS | HTTP 200, 88 points |
+| Qdrant reachable | PASS | HTTP 200, 122 points |
 | Write test record | PASS | ok |
 | Vector search retrieves test record | PASS | test record found |
 | Graph search executes (fallback OK) | PASS | graph search executed |
 | Neo4j memory_fulltext index exists | PASS | index present |
 | Cleanup test records from Qdrant | PASS | HTTP 200 |
 
-## Tadasana — PARTIAL
+## Tadasana — FLOWING
 **Pipeline:** Session Start Checks
-**Tension point:** Meditation log: no critical (P0) items
 
 | Step | Status | Detail |
 |------|--------|--------|
 | CLAUDE.md: no _WORKFLOW_NEEDS_INIT marker | PASS | initialized |
-| Workflow update check | PASS | [WARN] Could not check for updates (network error). Skipping. |
+| Workflow update check | PASS | ok |
 | Memory search (active tasks blockers) | PASS | 5 results |
 | capability-map.md exists | PASS | age 0.0d |
 | build-registry.json valid | PASS | 2 builds |
 | Session lock create/delete | PASS | ok |
 | Exchange server reachable | PASS | HTTP 200 |
 | Exchange inbox accessible | PASS | 0 pending messages |
-| Meditation log: no critical (P0) items | FAIL | P0:3 P1:6 P2:7 |
+| Meditation log: no critical (P0) items | PASS | P0:0 P1:6 P2:6 |
 
 ## Savasana — FLOWING
 **Pipeline:** Exchange Server Pipeline
@@ -40,7 +39,7 @@
 | Step | Status | Detail |
 |------|--------|--------|
 | Exchange health check | PASS | HTTP 200 |
-| Send test message | PASS | HTTP 201, id=9fb348f8-7d1a-4af8-b1d0-ebd96d51ab6e |
+| Send test message | PASS | HTTP 201, id=11a9885e-690c-475d-ac32-e57c4b4ada92 |
 | Test message visible in inbox | PASS | 1 yoga test message(s) found |
 | Watcher process running | PASS | pid(s): 24412 |
 | Cleanup test messages | PASS | marked 1/1 message(s) as read |

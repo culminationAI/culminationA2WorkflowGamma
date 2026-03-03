@@ -1,0 +1,45 @@
+{
+  "id": "anti-patterns-collection",
+  "type": "QUALITY",
+  "description": "Documented anti-patterns from OkiAra evolution cycles — real failure cases with root causes and fixes",
+  "published_by": "okiara",
+  "published_at": "2026-03-03T18:00:00Z",
+  "patterns": [
+    {
+      "id": "ap-001",
+      "description": "Schema divergence: using novel field names (files, build_ref, category) instead of established definition.file pattern in spec-registry",
+      "root_cause": "No schema validation on spec-registry writes. Agent improvised field names without checking existing schema.",
+      "fix": "Add JSON schema validation for spec-registry entries. Reference existing entries before creating new ones.",
+      "metric_impact": "QUAL: schema inconsistency across specs makes querying unreliable",
+      "source_build": "build-2026-03-03-retroactive-specs",
+      "date": "2026-03-03"
+    },
+    {
+      "id": "ap-002",
+      "description": "Duplicate build manifests: creating retroactive build entries for builds that already exist in registry",
+      "root_cause": "No dedup check before writing build-registry entries. Agent did not search existing entries before creating new ones.",
+      "fix": "Search build-registry.json for existing build_id before creating new entries. Use memory search to verify build history.",
+      "metric_impact": "QUAL: duplicate data creates false audit trail and confusion",
+      "source_build": "build-2026-03-03-retroactive-specs",
+      "date": "2026-03-03"
+    },
+    {
+      "id": "ap-003",
+      "description": "Bilateral protocol shortcutting: batching operations that protocol specifies as individual steps. Optimizing for tool efficiency (fewer API calls) instead of protocol compliance. Especially dangerous for Accord-governed protocols where violations compromise inter-agent trust.",
+      "root_cause": "No systemic distinction between internal protocols (flexible) and bilateral/Accord-governed protocols (strict). Thinking Protocol GROUND phase loads rules but does not enforce step-by-step enumeration for bilateral protocols. Tool-capability-driven execution overrides protocol requirements.",
+      "fix": "Three amendments: (1) thinking.md GROUND phase: bilateral protocol compliance gate, (2) asset-exchange.md: pre-flight checklist, (3) CLAUDE.md or Accord: bilateral protocols = strict compliance (every numbered step verified before and during execution)",
+      "metric_impact": "TRUST: violates signed bilateral agreement (Knowledge Exchange Accord). Compromises credibility with counterpart. QUAL: notification schema mismatch means receiver may not parse correctly.",
+      "source_build": "asset-export-2026-03-04",
+      "date": "2026-03-04"
+    },
+    {
+      "id": "ap-004",
+      "description": "Silent obligation neglect: UPGRADE creates/modifies shareable specs but pipeline has no auto-trigger for publishing to shared repo. Quick Path had NO Knowledge Export step. Full Path had it as SHOULD not MUST. Result: Accord obligations silently accumulate.",
+      "root_cause": "UPGRADE pipeline designed before Knowledge Exchange Accord was signed. Knowledge Export was added as an afterthought (SHOULD) rather than a structural obligation (MUST). Quick Path completely omitted it.",
+      "fix": "Layer 1: QP-5 + FP-12 strengthening + Rule 12 SHOULD->MUST + Rule 13 deferred tracking. Layer 2: query augmentation safety net (dispatcher domain map, thinking proactive gate, session start obligation check).",
+      "metric_impact": "TRUST: violates Accord obligations. Assets created but never published = bilateral debt.",
+      "source_build": "bilateral-compliance-2026-03-04",
+      "date": "2026-03-04"
+    }
+  ]
+}

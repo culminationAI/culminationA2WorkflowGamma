@@ -367,22 +367,24 @@ def pose_tadasana() -> PoseResult:
     except Exception as e:
         pose.add("Exchange inbox accessible", False, str(e))
 
-    # Step 9: meditation-log — check for unresolved P0-P2 recommendations
+    # Step 9: meditation-log — check for unresolved P0-P2 in latest session only.
+    # The log is append-only, so scanning the entire file inflates counts with
+    # historical (already-fixed) items. Counting only the last JSON block gives
+    # an accurate picture of the *current* system health.
     med_log = SOURCE_ROOT / "docs" / "self-architecture" / "meditation-log.md"
     if med_log.exists():
         content = med_log.read_text(encoding="utf-8")
-        # Look for unresolved P0/P1/P2 markers in repair/recommendation blocks
-        unresolved_pattern = re.compile(r'"status":\s*"(pending|open|unresolved)".*?"priority":\s*"(P[012])"', re.DOTALL)
-        unresolved = unresolved_pattern.findall(content)
-        # Also check simpler pattern: "P0:" or "P1:" in recommendations not marked resolved
+        # Extract the last JSON code block (latest meditation session)
+        json_blocks = re.findall(r"```json\s*\n(.*?)\n```", content, re.DOTALL)
+        last_block = json_blocks[-1] if json_blocks else ""
         p_counts = {"P0": 0, "P1": 0, "P2": 0}
-        for line in content.splitlines():
+        for line in last_block.splitlines():
             for p in ("P0", "P1", "P2"):
                 if f'"{p}"' in line or f": {p}" in line or f"[{p}]" in line:
                     p_counts[p] += 1
         total_flagged = sum(p_counts.values())
         detail = f"P0:{p_counts['P0']} P1:{p_counts['P1']} P2:{p_counts['P2']}"
-        # Not a failure — just informational. Pass if no P0s specifically.
+        # Pass if no P0s in the latest meditation session.
         pose.add("Meditation log: no critical (P0) items", p_counts["P0"] == 0, detail)
     else:
         pose.add("Meditation log exists", False, "file not found")
