@@ -12,7 +12,8 @@ protocols/
 │   ├── initialization.md  ← project onboarding (via build-up)
 │   ├── build-up.md        ← self-improvement pipeline
 │   ├── coordination.md    ← parallel agent orchestration
-│   └── query-optimization.md ← T1-T5 tier classification
+│   ├── query-optimization.md ← T1-T5 tier classification
+│   └── evolution.md       ← orchestration layer: correction capture, session-end review, adaptive build, predictive loop
 ├── agents/                ← agent lifecycle and communication
 │   ├── agent-creation.md  ← creating new domain agents
 │   ├── agent-communication.md ← dispatch/response format

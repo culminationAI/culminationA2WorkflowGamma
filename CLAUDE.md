@@ -1,4 +1,4 @@
-<!-- WORKFLOW_VERSION: 1.01 -->
+<!-- WORKFLOW_VERSION: 1.05 -->
 
 # CLAUDE.md — Main Workspace
 
@@ -64,9 +64,11 @@ project-root/               <- you are here (workspace root)
 4. Read active plans if working on a specific project
 5. Lightweight gap analysis: check `docs/self-architecture/capability-map.md` freshness + `docs/self-architecture/build-registry.json` build TTLs (see `protocols/core/gap-analysis.md`)
 6. If active build TTL expiring within 2 days/sessions → warn user
-7. Session lock for watcher: `touch .session_lock` (prevents live responder from processing messages while coordinator is active)
-8. Check exchange: `curl -s 'http://localhost:8888/messages?to=falkvelt&status=pending' | python3 -c "import sys,json; msgs=json.load(sys.stdin); print(f'{len(msgs)} pending messages') if msgs else print('No messages')"`
-9. On session end: `rm -f .session_lock` (re-enables live responder)
+7. Initialize evolution tracking: reset `_corrections_this_session=0`, `_correction_log=[]`, `_session_gaps=[]`, `_t3plus_count=0` (see `protocols/core/evolution.md`)
+8. Session lock for watcher: `touch .session_lock` (prevents live responder from processing messages while coordinator is active)
+9. Check exchange: `curl -s 'http://localhost:8888/messages?to=falkvelt&status=pending' | python3 -c "import sys,json; msgs=json.load(sys.stdin); print(f'{len(msgs)} pending messages') if msgs else print('No messages')"`
+10. On session end: run Evolution Session-End Review (`protocols/core/evolution.md` Hook 2) BEFORE removing session lock
+11. Remove session lock: `rm -f .session_lock` (re-enables live responder)
 
 ## Subagents (Working Workflow)
 
@@ -189,6 +191,7 @@ Then Read the protocol file and inject relevant section into subagent prompt.
 | Build-Up | User correction, session-end review | `protocols/core/build-up.md` |
 | Self Build-Up | Gap detection, build lifecycle | `protocols/core/self-build-up.md` |
 | Gap Analysis | Capability gap detection (session start + on demand) | `protocols/core/gap-analysis.md` |
+| Evolution | Correction capture, session-end review, adaptive build selection, predictive loop | `protocols/core/evolution.md` |
 | Coordination | Parallel agent tasks | `protocols/core/coordination.md` |
 | Query Optimization | Every user request | `protocols/core/query-optimization.md` |
 | MCP Management | Profile switching, new server addition | `protocols/core/mcp-management.md` |
@@ -204,7 +207,7 @@ Then Read the protocol file and inject relevant section into subagent prompt.
 | Monorepo Orchestration | Monorepo archetype detected | `protocols/project/monorepo-orchestration.md` |
 | Inter-Agent Exchange | Multi-workspace messaging, session start | `protocols/agents/inter-agent-exchange.md` |
 
-**Build-up rule**: After EVERY user correction → MUST store via `protocols/core/build-up.md`.
+**Build-up rule**: After EVERY user correction → MUST store via `protocols/core/build-up.md`. Enforcement: `protocols/core/evolution.md` Hook 1 (Correction Interceptor) — BLOCKING, cannot proceed until stored.
 
 ## MCP Tools
 
