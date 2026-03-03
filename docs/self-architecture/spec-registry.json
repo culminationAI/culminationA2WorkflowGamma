@@ -1,12 +1,36 @@
 {
-  "version": "1.0",
-  "last_updated": "2026-03-03T03:30:00Z",
+  "version": "2.0",
+  "last_updated": "2026-03-03T05:30:00Z",
   "max_standalone_specs": 3,
+  "domain_map": {
+    "exchange": {
+      "infrastructure": ["spec-exchange-responder", "spec-heartbeat-payload"],
+      "security": {
+        "chain-integrity": ["spec-chain-payload-hash"],
+        "chain-verification": ["spec-chain-auto-verification"],
+        "agent-identity": ["spec-agent-authentication"],
+        "message-safety": ["spec-exchange-validation"]
+      },
+      "protocol": ["spec-protocol-versioning", "spec-knowledge-sharing"]
+    },
+    "evolution": {
+      "pipeline": ["spec-evolution-protocol"]
+    },
+    "self-architecture": {
+      "mapping": ["spec-capability-map"]
+    }
+  },
   "specs": [
     {
       "id": "spec-exchange-responder",
       "type": "AGENT",
       "domain": "exchange",
+      "domain_path": "exchange/infrastructure/responder",
+      "tags": ["watcher", "SSE", "polling", "auto-response", "claude-p", "daemon"],
+      "status": "IMPLEMENTED",
+      "depends_on": [],
+      "related_specs": ["spec-heartbeat-payload"],
+      "spec_file": null,
       "description": "Live exchange responder — watcher daemon with dual SSE/polling transport and claude -p auto-response delegation",
       "definition": {
         "files": [
@@ -29,6 +53,12 @@
       "id": "spec-heartbeat-payload",
       "type": "AGENT",
       "domain": "exchange",
+      "domain_path": "exchange/infrastructure/heartbeat",
+      "tags": ["heartbeat", "presence", "ping-pong", "payload", "status"],
+      "status": "IMPLEMENTED",
+      "depends_on": ["spec-exchange-responder"],
+      "related_specs": ["spec-exchange-responder"],
+      "spec_file": null,
       "description": "Heartbeat daemon thread and structured payload parser supporting ping/pong and status_request message types",
       "definition": {
         "files": [
@@ -50,6 +80,12 @@
       "id": "spec-evolution-protocol",
       "type": "PROTOCOL",
       "domain": "evolution",
+      "domain_path": "evolution/pipeline",
+      "tags": ["evolution", "correction", "session-review", "hooks", "prediction", "knowledge-export"],
+      "status": "IMPLEMENTED",
+      "depends_on": [],
+      "related_specs": ["spec-capability-map"],
+      "spec_file": null,
       "description": "Evolution orchestration layer with 6 hooks: Correction Interceptor (BLOCKING), Session-End Review (MANDATORY), Adaptive Orchestrator, Predictive Loop, Post-Task Verification, Knowledge Export",
       "definition": {
         "files": [
@@ -73,6 +109,12 @@
       "id": "spec-capability-map",
       "type": "PROTOCOL",
       "domain": "self-architecture",
+      "domain_path": "self-architecture/mapping",
+      "tags": ["capability-map", "self-awareness", "cross-reference", "inventory", "trajectory"],
+      "status": "IMPLEMENTED",
+      "depends_on": [],
+      "related_specs": ["spec-evolution-protocol"],
+      "spec_file": null,
       "description": "Self-architecture capability map v1.05 — full inventory of agents, protocols, MCP servers, memory subsystem, Neo4j graph, and cross-references",
       "definition": {
         "files": [
@@ -94,6 +136,12 @@
       "id": "spec-knowledge-sharing",
       "type": "PROTOCOL",
       "domain": "knowledge",
+      "domain_path": "exchange/protocol/sharing",
+      "tags": ["knowledge", "sharing", "digest", "correction", "import", "export", "dedup"],
+      "status": "IMPLEMENTED",
+      "depends_on": [],
+      "related_specs": ["spec-protocol-versioning"],
+      "spec_file": null,
       "description": "Push-based inter-agent knowledge exchange — universal corrections exported as JSON digests and delivered via exchange messages for cross-agent learning",
       "definition": {
         "files": [
@@ -112,6 +160,151 @@
       "created_at": "2026-03-03T03:30:00Z",
       "commit": "fd0effd",
       "used_by_builds": ["build-2026-03-03-session1"]
+    },
+    {
+      "id": "spec-chain-payload-hash",
+      "type": "SECURITY",
+      "domain": "exchange",
+      "domain_path": "exchange/security/chain-integrity",
+      "tags": ["chain", "hash", "payload", "SHA-256", "canonical-json", "tamper-evidence", "JSONL"],
+      "status": "PROPOSED",
+      "depends_on": [],
+      "related_specs": ["spec-chain-auto-verification"],
+      "spec_file": "docs/specs/spec-chain-payload-hash.md",
+      "description": "Include payload field in chain block hash via canonical JSON serialization for tamper-evidence",
+      "definition": {
+        "files": [
+          {"path": "infra/exchange-shared/chain.py", "action": "modify"},
+          {"path": "infra/exchange-shared/app.py", "action": "modify"}
+        ],
+        "capabilities": [
+          "payload hash",
+          "canonical serialization",
+          "backward-compatible migration"
+        ]
+      },
+      "state": "AVAILABLE",
+      "created_at": "2026-03-03T05:30:00Z",
+      "commit": null,
+      "used_by_builds": []
+    },
+    {
+      "id": "spec-chain-auto-verification",
+      "type": "SECURITY",
+      "domain": "exchange",
+      "domain_path": "exchange/security/chain-verification",
+      "tags": ["chain", "verification", "asyncio", "background-task", "periodic", "startup", "checkpoint"],
+      "status": "PROPOSED",
+      "depends_on": ["spec-chain-payload-hash"],
+      "related_specs": ["spec-chain-payload-hash"],
+      "spec_file": "docs/specs/spec-chain-auto-verification.md",
+      "description": "Automatic chain integrity verification on startup and periodic (6h) via asyncio background task with per-agent checkpoints",
+      "definition": {
+        "files": [
+          {"path": "infra/exchange-shared/app.py", "action": "modify"}
+        ],
+        "capabilities": [
+          "startup verification",
+          "periodic verification",
+          "per-agent checkpoints",
+          "chain health status",
+          "compaction threshold"
+        ]
+      },
+      "state": "AVAILABLE",
+      "created_at": "2026-03-03T05:30:00Z",
+      "commit": null,
+      "used_by_builds": []
+    },
+    {
+      "id": "spec-agent-authentication",
+      "type": "SECURITY",
+      "domain": "exchange",
+      "domain_path": "exchange/security/agent-identity",
+      "tags": ["HMAC", "SHA-256", "authentication", "CORS", "approve-mode", "shared-secret", "middleware"],
+      "status": "PROPOSED",
+      "depends_on": [],
+      "related_specs": ["spec-exchange-validation"],
+      "spec_file": "docs/specs/spec-agent-authentication.md",
+      "description": "Agent identity verification via HMAC-SHA256 shared secret, CORS restriction, and approve-mode token protection",
+      "definition": {
+        "files": [
+          {"path": "infra/exchange-shared/app.py", "action": "modify"},
+          {"path": "infra/responder/watcher.py", "action": "modify"},
+          {"path": "secrets/.env", "action": "modify"}
+        ],
+        "capabilities": [
+          "HMAC signing",
+          "request authentication",
+          "CORS restriction",
+          "approve-mode protection",
+          "replay prevention"
+        ]
+      },
+      "state": "AVAILABLE",
+      "created_at": "2026-03-03T05:30:00Z",
+      "commit": null,
+      "used_by_builds": []
+    },
+    {
+      "id": "spec-exchange-validation",
+      "type": "SECURITY",
+      "domain": "exchange",
+      "domain_path": "exchange/security/message-safety",
+      "tags": ["validation", "injection", "PII", "quarantine", "rate-limit", "prompt-injection", "sanitization"],
+      "status": "PROPOSED",
+      "depends_on": [],
+      "related_specs": ["spec-agent-authentication"],
+      "spec_file": "docs/specs/spec-exchange-validation.md",
+      "description": "Exchange message validation pipeline with shared validators, quarantine mechanism, rate limiting, and prompt injection defense",
+      "definition": {
+        "files": [
+          {"path": "memory/scripts/validators.py", "action": "create"},
+          {"path": "infra/exchange-shared/app.py", "action": "modify"},
+          {"path": "infra/responder/context.py", "action": "modify"},
+          {"path": "infra/responder/watcher.py", "action": "modify"},
+          {"path": "memory/scripts/memory_write.py", "action": "modify"}
+        ],
+        "capabilities": [
+          "PII detection",
+          "injection scanning",
+          "quarantine status",
+          "rate limiting",
+          "prompt injection defense"
+        ]
+      },
+      "state": "AVAILABLE",
+      "created_at": "2026-03-03T05:30:00Z",
+      "commit": null,
+      "used_by_builds": []
+    },
+    {
+      "id": "spec-protocol-versioning",
+      "type": "PROTOCOL",
+      "domain": "exchange",
+      "domain_path": "exchange/protocol/versioning",
+      "tags": ["protocol", "versioning", "semver", "content-hash", "conflict-detection", "dependency", "consensus"],
+      "status": "PROPOSED",
+      "depends_on": [],
+      "related_specs": ["spec-knowledge-sharing"],
+      "spec_file": "docs/specs/spec-protocol-versioning.md",
+      "description": "Protocol versioning with semver + SHA-256 content hash, conflict detection, dependency resolution, and conditional activation",
+      "definition": {
+        "files": [
+          {"path": "protocols/agents/protocol-exchange.md", "action": "modify"}
+        ],
+        "capabilities": [
+          "protocol versioning",
+          "content-addressable identity",
+          "conflict detection",
+          "dependency checking",
+          "conditional activation"
+        ]
+      },
+      "state": "AVAILABLE",
+      "created_at": "2026-03-03T05:30:00Z",
+      "commit": null,
+      "used_by_builds": []
     }
   ]
 }

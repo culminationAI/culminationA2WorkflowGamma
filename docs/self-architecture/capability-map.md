@@ -1,6 +1,6 @@
 # Capability Map — FalkVelt (_follower_)
 
-**Version:** 1.05
+**Version:** 1.55
 **Coordinator:** FalkVelt (Style: closed/robotic, Role: follower)
 **Primary coordinator:** OkiAra (_primal_ at `/Users/eliahkadu/Desktop/_primal_`)
 **User:** Eliah (style=brief+detailed, priorities=quality+speed, language=Russian)
@@ -69,7 +69,7 @@
 |------|------|---------|
 | Monorepo Orchestration | `protocols/project/monorepo-orchestration.md` | Monorepo archetype detected |
 
-**Total:** 20 protocols across 5 categories.
+**Total:** 22 protocols across 5 categories (incl. protocol-exchange, shared-repo-sync, knowledge-sharing).
 
 ---
 
@@ -168,7 +168,7 @@
 | MCP profile matches agent declarations | PASS — engineer(neo4j+qdrant), llm-engineer(github), all active |
 | FalkVelt node in Neo4j | PASS — version=1.0, style=closed, role=follower |
 | FOLLOWS->okiara in Neo4j | PASS |
-| Spec registry | EMPTY (no specs yet — expected at v1.0) |
+| Spec registry | 5 specs (v1.55) + 5 security specs in docs/specs/ |
 | request-history.json | ABSENT (expected — no sessions yet) |
 
 **Inconsistencies:** None.
@@ -197,4 +197,30 @@
 **Dominant domains:** N/A
 **Activity pattern:** N/A
 **Phase classification:** IMPLEMENTATION
-**Trend:** Infrastructure buildout: responder, exchange, evolution enforcement
+**Trend:** Infrastructure buildout: responder, exchange, evolution enforcement, security specs
+
+---
+
+## 10. Exchange Security Status
+
+Research completed 2026-03-03. 9 gaps identified, 5 specs produced covering all gaps.
+
+| Gap | Priority | Status | Spec |
+|-----|----------|--------|------|
+| Payload not in chain hash | P1 | SPECCED | `docs/specs/spec-chain-payload-hash.md` |
+| No sender authentication | P2 | SPECCED | `docs/specs/spec-agent-authentication.md` |
+| Chain verification passive | P3 | SPECCED | `docs/specs/spec-chain-auto-verification.md` |
+| No PII/injection on memory write | P4 | SPECCED | `docs/specs/spec-exchange-validation.md` |
+| CORS wildcard + approve-mode | P5 | SPECCED | `docs/specs/spec-agent-authentication.md` |
+| Protocol version divergence | P6 | SPECCED | `docs/specs/spec-protocol-versioning.md` |
+| No per-agent verification checkpoints | P7 | SPECCED | `docs/specs/spec-chain-auto-verification.md` |
+| No protocol dependency graph | P8 | SPECCED | `docs/specs/spec-protocol-versioning.md` |
+| Memory cross-workspace contamination | P9 | IDENTIFIED | 7 records lack `_source` tag |
+
+### Key Decisions
+- **Authentication:** HMAC-SHA256 shared secret (NOT Ed25519). Key in `secrets/.env`.
+- **Payload hash:** Canonical JSON via `json.dumps(sort_keys=True, separators=(',', ':'))` → SHA-256.
+- **Chain verify:** Startup + periodic 6h via asyncio background task.
+- **Validation:** Shared `validators.py` module, quarantine status, rate limiting 10/min/agent.
+- **Protocol versioning:** Semver + SHA-256 content hash. Conflict = always manual merge.
+- **Protocol registry:** DEFERRED until >50 protocols or 3rd workspace.
