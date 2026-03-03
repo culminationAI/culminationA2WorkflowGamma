@@ -1,4 +1,4 @@
-<!-- WORKFLOW_VERSION: 2.25 -->
+<!-- WORKFLOW_VERSION: 2.35 -->
 
 # CLAUDE.md — Main Workspace
 

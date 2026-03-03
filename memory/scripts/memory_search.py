@@ -17,21 +17,10 @@ NEO4J_URL = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.environ.get("NEO4J_USERNAME", "neo4j")
 NEO4J_PASS = os.environ.get("NEO4J_PASSWORD", "workflow")
 
-EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-EMBED_DIMS = 384
-_embedder = None  # lazy init
+from embedding import get_embedding, get_vector_size
+
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 COLLECTION = "workflow_memory"
-
-
-def get_embedding(text: str) -> list[float]:
-    """Get embedding via fastembed (local, no external API)."""
-    global _embedder
-    if _embedder is None:
-        from fastembed import TextEmbedding
-        _embedder = TextEmbedding(model_name=EMBED_MODEL)
-    embeddings = list(_embedder.embed([text]))
-    return embeddings[0].tolist()[:EMBED_DIMS]
 
 
 def search(query: str, limit: int = 10, user_id: str | None = None) -> list[dict]:

@@ -19,6 +19,10 @@ from typing import Optional, List, Dict, Any
 
 import requests
 
+# Ensure the scripts directory is on the path regardless of cwd
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from embedding import _embed_fastembed as _fastembed_single, _embed_ollama as _ollama_single
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -27,11 +31,9 @@ QDRANT_URL: str = os.environ.get("QDRANT_URL", "http://localhost:6333")
 COLLECTION: str = os.environ.get("COLLECTION_NAME", "workflow_memory")
 OLLAMA_URL: str = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 
-FASTEMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 FASTEMBED_DIM = 384
-
-OLLAMA_MODEL = "bge-m3"
 OLLAMA_DIM = 1024
+OLLAMA_MODEL = "bge-m3"
 
 BATCH_SIZE = 100
 
@@ -41,31 +43,13 @@ BATCH_SIZE = 100
 # ---------------------------------------------------------------------------
 
 def embed_fastembed(texts: List[str]) -> List[List[float]]:
-    """Embed texts using fastembed (all-MiniLM-L6-v2, 384d)."""
-    try:
-        from fastembed import TextEmbedding
-    except ImportError:
-        print("[ERROR] fastembed is not installed. Run: pip install fastembed")
-        sys.exit(1)
-
-    embedder = TextEmbedding(model_name=FASTEMBED_MODEL)
-    return [e.tolist() for e in embedder.embed(texts)]
+    """Embed a batch of texts using fastembed (all-MiniLM-L6-v2, 384d)."""
+    return [_fastembed_single(t) for t in texts]
 
 
 def embed_ollama(texts: List[str]) -> List[List[float]]:
-    """Embed texts one-by-one via Ollama bge-m3 API (1024d)."""
-    vectors: List[List[float]] = []
-    for text in texts:
-        r = requests.post(
-            f"{OLLAMA_URL}/api/embed",
-            json={"model": OLLAMA_MODEL, "input": text},
-            timeout=30,
-        )
-        r.raise_for_status()
-        raw = r.json()["embeddings"][0]
-        # Truncate to 1024 in case model returns more dimensions
-        vectors.append(raw[:OLLAMA_DIM])
-    return vectors
+    """Embed a batch of texts via Ollama bge-m3 (1024d)."""
+    return [_ollama_single(t) for t in texts]
 
 
 # ---------------------------------------------------------------------------

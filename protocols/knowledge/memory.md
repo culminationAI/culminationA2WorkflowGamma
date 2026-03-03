@@ -116,50 +116,41 @@ When memory contains contradictory records:
 
 ## Embedding Providers
 
-### Default: fastembed (all-MiniLM-L6-v2, 384d)
+### Default: Ollama bge-m3 (1024d)
 
-- Runs in-process, no external service
+Runs in Docker container `workflow-ollama`. Multilingual, 1024d vectors, higher recall for diverse content.
+
+- Start: `docker compose up -d ollama` (in `infra/`)
+- Model bge-m3 is pre-pulled in the container image
+- ~1.5 GB RAM overhead
+
+### Fallback: fastembed (all-MiniLM-L6-v2, 384d)
+
+Runs in-process, no external service. Use when Ollama is unavailable or RAM is constrained.
+
+- Enable: set `EMBEDDING_PROVIDER=fastembed` in `secrets/.env`
 - ~90 MB model download on first use
-- Matches MCP Qdrant server embedding model
-- Sufficient for English memory records (≤200 tokens)
 
-### Optional: Ollama bge-m3 (1024d)
+### Routing
 
-Higher quality embeddings — multilingual, 1024d vectors. Trade-off: +1.5 GB RAM, requires Ollama service.
+All memory scripts import from `memory/scripts/embedding.py`, which routes between providers based on `EMBEDDING_PROVIDER` env var. The MCP Qdrant server uses a custom entry point `mcp/ollama_qdrant_server.py` that applies the same routing.
 
-**Migration steps:**
+### Switching providers
 
-1. Install Ollama: https://ollama.ai
-2. Pull model:
-   ```bash
-   ollama pull bge-m3
-   ```
-3. Run migration:
-   ```bash
-   # Preview (no changes)
-   python3 memory/scripts/memory_migrate.py --to ollama --dry-run
-
-   # Execute migration
-   python3 memory/scripts/memory_migrate.py --to ollama
-   ```
-4. The script will:
-   - Create new Qdrant collection `workflow_memory_ollama_1024d`
-   - Scroll all records from current collection (384d)
-   - Re-embed each record with bge-m3 (1024d)
-   - Upsert into new collection
-   - Rename: old → `workflow_memory_backup`, new → `workflow_memory`
-5. Update `secrets/.env`:
-   ```
-   EMBEDDING_PROVIDER=ollama
-   ```
-6. Verify:
-   ```bash
-   python3 memory/scripts/memory_verify.py
-   ```
-
-**Rollback:** To revert to fastembed:
 ```bash
+# Switch to fastembed (384d)
 python3 memory/scripts/memory_migrate.py --to fastembed
+
+# Switch to Ollama (1024d)
+python3 memory/scripts/memory_migrate.py --to ollama
+
+# Preview before running
+python3 memory/scripts/memory_migrate.py --to fastembed --dry-run
 ```
 
-**Important:** MCP Qdrant server always uses fastembed 384d (configured in `mcp/mcp.json`). After migrating scripts to Ollama, the MCP server and Python scripts will use different collections. To avoid conflicts, use Python scripts as the primary memory interface after migration.
+Migration backs up the current collection, creates a new one at the target dimensions, re-embeds all records, then swaps in the new collection. Old data is preserved as `workflow_memory_backup_{N}d`.
+
+After migration, update `EMBEDDING_PROVIDER` in `secrets/.env` and verify:
+```bash
+python3 memory/scripts/memory_verify.py
+```

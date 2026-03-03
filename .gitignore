@@ -4,6 +4,7 @@ __pycache__/
 infra/qdrant_storage/
 infra/neo4j_data/
 infra/neo4j_backups/
+infra/ollama_models/
 secrets/.env
 .mcp.json
 .claude/agent-memory/

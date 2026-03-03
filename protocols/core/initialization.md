@@ -21,7 +21,7 @@ Check prerequisites:
 4. Verify Node.js 18+ available (required for MCP servers via npx)
 5. If any missing → provide install instructions, pause until resolved
 
-Note: Ollama is optional (for higher quality embeddings). Embeddings are handled via fastembed by default — no external services required. See `protocols/knowledge/memory.md` for details.
+Note: Ollama service is required for the default bge-m3 embeddings (1024d). Start with `docker compose up -d ollama` in `infra/`. Fallback: set `EMBEDDING_PROVIDER=fastembed` in `secrets/.env` to use local fastembed (384d, no external service). See `protocols/knowledge/memory.md` for details.
 
 ### Phase 2: Greet
 

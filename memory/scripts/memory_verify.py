@@ -26,8 +26,9 @@ from datetime import datetime, timezone
 
 import requests
 
-EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-EMBED_DIMS = 384
+from embedding import get_embedding, get_vector_size
+
+EMBED_DIMS = get_vector_size()
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 COLLECTION = "workflow_memory"
 NEO4J_URL = os.environ.get("NEO4J_URL", "http://localhost:7474")
@@ -112,25 +113,22 @@ class Verifier:
             self.check("Neo4j reachable", False, str(e))
 
     def check_embeddings(self):
-        print("\n── Embeddings (fastembed) ──")
+        import os
+        provider = os.environ.get("EMBEDDING_PROVIDER", "fastembed")
+        print(f"\n── Embeddings ({provider}) ──")
         try:
-            from fastembed import TextEmbedding
-            embedder = TextEmbedding(model_name=EMBED_MODEL)
-            embeddings = list(embedder.embed(["test embedding"]))
-            dims = len(embeddings[0])
-            self.check("fastembed all-MiniLM-L6-v2", True, f"{dims}d vectors")
+            vector = get_embedding("test embedding")
+            dims = len(vector)
+            self.check(f"{provider} embedding", True, f"{dims}d vectors")
         except Exception as e:
-            self.check("fastembed all-MiniLM-L6-v2", False, str(e))
+            self.check(f"{provider} embedding", False, str(e))
 
     def check_roundtrip(self):
         print("\n── Roundtrip Test ──")
         canary_id = str(uuid.uuid4())
         try:
             # 1. Embed
-            from fastembed import TextEmbedding
-            embedder = TextEmbedding(model_name=EMBED_MODEL)
-            embeddings = list(embedder.embed([CANARY_TEXT]))
-            vector = embeddings[0].tolist()[:EMBED_DIMS]
+            vector = get_embedding(CANARY_TEXT)
             self.check("Embed canary", True)
 
             # 2. Write
