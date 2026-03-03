@@ -25,6 +25,7 @@ import uuid
 import hashlib
 import argparse
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import os
@@ -92,6 +93,16 @@ NEO4J_URL = os.environ.get("NEO4J_URL", "http://localhost:7474")
 NEO4J_USER = os.environ.get("NEO4J_USERNAME", "neo4j")
 NEO4J_PASS = os.environ.get("NEO4J_PASSWORD", "workflow")
 NEO4J_DB = "neo4j"
+
+# Auto-detect workspace source from directory name.
+# Convention: project root dir name = _source tag (e.g., "_follower_", "_primal_")
+def _detect_source() -> str:
+    """Detect _source tag from workspace root directory name."""
+    script_dir = Path(__file__).resolve().parent  # memory/scripts/
+    project_root = script_dir.parent.parent        # project root
+    return project_root.name
+
+PROJECT_SOURCE = _detect_source()
 
 
 def qdrant_upsert(point_id: str, vector: list[float], payload: dict[str, Any]) -> None:
@@ -209,6 +220,7 @@ def write_memories(records: list[dict]) -> dict[str, int]:
                 "updated_at": None,
                 "user_id": user_id,
                 "agent_id": agent_id,
+                "_source": PROJECT_SOURCE,  # workspace isolation tag
             }
             if metadata:
                 payload["metadata"] = metadata

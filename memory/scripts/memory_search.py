@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import argparse
+from pathlib import Path
 import requests
 
 NEO4J_URL = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
@@ -22,11 +23,19 @@ from embedding import get_embedding, get_vector_name
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 COLLECTION = "workflow_memory"
 
-
 VECTOR_NAME = get_vector_name()
 
+# Auto-detect workspace source from directory name.
+# Convention: project root dir name = _source tag (e.g., "_follower_", "_primal_")
+def _detect_source() -> str:
+    script_dir = Path(__file__).resolve().parent  # memory/scripts/
+    project_root = script_dir.parent.parent        # project root
+    return project_root.name
 
-def search(query: str, limit: int = 10, user_id: str | None = None) -> list[dict]:
+PROJECT_SOURCE = _detect_source()
+
+
+def search(query: str, limit: int = 10, user_id: str | None = None, source: str | None = None) -> list[dict]:
     vector = get_embedding(query)
 
     body = {
@@ -34,12 +43,15 @@ def search(query: str, limit: int = 10, user_id: str | None = None) -> list[dict
         "limit": limit,
         "with_payload": True,
     }
-    
+
+    must_conditions = []
     if user_id:
-        body["filter"] = {
-            "must": [{"key": "user_id", "match": {"value": user_id}}]
-        }
-    
+        must_conditions.append({"key": "user_id", "match": {"value": user_id}})
+    if source:
+        must_conditions.append({"key": "_source", "match": {"value": source}})
+    if must_conditions:
+        body["filter"] = {"must": must_conditions}
+
     resp = requests.post(
         f"{QDRANT_URL}/collections/{COLLECTION}/points/search",
         json=body,
@@ -148,6 +160,8 @@ def main():
     parser.add_argument("query", help="Search query")
     parser.add_argument("--limit", "-l", type=int, default=10)
     parser.add_argument("--user-id", "-u", default="user")
+    parser.add_argument("--source", "-s", default=PROJECT_SOURCE,
+                        help=f"Filter by _source tag (default: {PROJECT_SOURCE}, use 'all' for no filter)")
     parser.add_argument("--graph", "-g", action="store_true",
                         help="Use Neo4j graph traversal (2-hop neighborhood) instead of vector search")
     args = parser.parse_args()
@@ -155,7 +169,8 @@ def main():
     if args.graph:
         results = graph_search(args.query, args.limit)
     else:
-        results = search(args.query, args.limit, args.user_id)
+        source_filter = None if args.source == "all" else args.source
+        results = search(args.query, args.limit, args.user_id, source=source_filter)
     print(json.dumps(results, indent=2, ensure_ascii=False))
 
 
