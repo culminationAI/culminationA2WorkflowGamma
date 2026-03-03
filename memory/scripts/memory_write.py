@@ -80,9 +80,10 @@ def safe_json_load(source, max_bytes: int = MAX_JSON_BYTES):
         return json.loads(source)
 
 # --- Config ---
-from embedding import get_embedding, get_vector_size
+from embedding import get_embedding, get_vector_size, get_vector_name
 
 EMBED_DIMS = get_vector_size()
+VECTOR_NAME = get_vector_name()
 
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 COLLECTION = "workflow_memory"
@@ -94,14 +95,14 @@ NEO4J_DB = "neo4j"
 
 
 def qdrant_upsert(point_id: str, vector: list[float], payload: dict[str, Any]) -> None:
-    """Upsert a single point to Qdrant."""
+    """Upsert a single point to Qdrant (named vector)."""
     resp = requests.put(
         f"{QDRANT_URL}/collections/{COLLECTION}/points",
         json={
             "points": [
                 {
                     "id": point_id,
-                    "vector": vector,
+                    "vector": {VECTOR_NAME: vector},
                     "payload": payload,
                 }
             ]

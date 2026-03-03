@@ -26,9 +26,10 @@ from datetime import datetime, timezone
 
 import requests
 
-from embedding import get_embedding, get_vector_size
+from embedding import get_embedding, get_vector_size, get_vector_name
 
 EMBED_DIMS = get_vector_size()
+VECTOR_NAME = get_vector_name()
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 COLLECTION = "workflow_memory"
 NEO4J_URL = os.environ.get("NEO4J_URL", "http://localhost:7474")
@@ -142,7 +143,7 @@ class Verifier:
             }
             r = requests.put(
                 f"{QDRANT_URL}/collections/{COLLECTION}/points",
-                json={"points": [{"id": canary_id, "vector": vector, "payload": payload}]},
+                json={"points": [{"id": canary_id, "vector": {VECTOR_NAME: vector}, "payload": payload}]},
                 timeout=5,
             )
             r.raise_for_status()
@@ -151,7 +152,7 @@ class Verifier:
             # 3. Search
             r = requests.post(
                 f"{QDRANT_URL}/collections/{COLLECTION}/points/search",
-                json={"vector": vector, "limit": 1, "with_payload": True,
+                json={"vector": {"name": VECTOR_NAME, "vector": vector}, "limit": 1, "with_payload": True,
                       "filter": {"must": [{"key": "user_id", "match": {"value": "test"}}]}},
                 timeout=5,
             )

@@ -17,17 +17,20 @@ NEO4J_URL = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.environ.get("NEO4J_USERNAME", "neo4j")
 NEO4J_PASS = os.environ.get("NEO4J_PASSWORD", "workflow")
 
-from embedding import get_embedding, get_vector_size
+from embedding import get_embedding, get_vector_name
 
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 COLLECTION = "workflow_memory"
 
 
+VECTOR_NAME = get_vector_name()
+
+
 def search(query: str, limit: int = 10, user_id: str | None = None) -> list[dict]:
     vector = get_embedding(query)
-    
+
     body = {
-        "vector": vector,
+        "vector": {"name": VECTOR_NAME, "vector": vector},
         "limit": limit,
         "with_payload": True,
     }

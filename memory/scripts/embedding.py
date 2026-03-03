@@ -18,10 +18,14 @@ EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "sentence-transformers/all-M
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "bge-m3")
 
-# Vector dimensions per provider
+# Vector dimensions and names per provider
 _DIMS = {
     "fastembed": 384,
     "ollama": 1024,
+}
+_VECTOR_NAMES = {
+    "fastembed": "fast-all-minilm-l6-v2",
+    "ollama": "bge-m3",
 }
 
 # Lazy-init fastembed embedder
@@ -31,6 +35,11 @@ _fastembed_embedder = None
 def get_vector_size() -> int:
     """Return the embedding dimension for the active provider."""
     return _DIMS.get(EMBEDDING_PROVIDER, 384)
+
+
+def get_vector_name() -> str:
+    """Return the named vector key for the active provider (matches MCP Qdrant)."""
+    return _VECTOR_NAMES.get(EMBEDDING_PROVIDER, "fast-all-minilm-l6-v2")
 
 
 def _get_fastembed_embedder():

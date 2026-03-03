@@ -21,7 +21,7 @@ import requests
 
 # Ensure the scripts directory is on the path regardless of cwd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from embedding import _embed_fastembed as _fastembed_single, _embed_ollama as _ollama_single
+from embedding import _embed_fastembed as _fastembed_single, _embed_ollama as _ollama_single, _VECTOR_NAMES
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -84,11 +84,15 @@ def count_points(name: str) -> int:
     return info.get("points_count", 0)
 
 
-def create_collection(name: str, size: int) -> None:
-    """Create a new Qdrant collection with Cosine distance."""
+def create_collection(name: str, size: int, vector_name: str | None = None) -> None:
+    """Create a new Qdrant collection with Cosine distance (named or unnamed vectors)."""
+    if vector_name:
+        vectors_config = {vector_name: {"size": size, "distance": "Cosine"}}
+    else:
+        vectors_config = {"size": size, "distance": "Cosine"}
     r = requests.put(
         f"{QDRANT_URL}/collections/{name}",
-        json={"vectors": {"size": size, "distance": "Cosine"}},
+        json={"vectors": vectors_config},
         timeout=10,
     )
     r.raise_for_status()
@@ -229,6 +233,7 @@ def migrate(target: str, dry_run: bool) -> int:
     if target == "ollama":
         src_dim = FASTEMBED_DIM
         dst_dim = OLLAMA_DIM
+        dst_vector_name = _VECTOR_NAMES["ollama"]
         src_label = f"fastembed ({src_dim}d)"
         dst_label = f"Ollama bge-m3 ({dst_dim}d)"
         backup_suffix = f"backup_{src_dim}d"
@@ -237,6 +242,7 @@ def migrate(target: str, dry_run: bool) -> int:
     else:  # fastembed
         src_dim = OLLAMA_DIM
         dst_dim = FASTEMBED_DIM
+        dst_vector_name = _VECTOR_NAMES["fastembed"]
         src_label = f"Ollama bge-m3 ({src_dim}d)"
         dst_label = f"fastembed ({dst_dim}d)"
         backup_suffix = f"backup_{src_dim}d"
@@ -292,8 +298,8 @@ def migrate(target: str, dry_run: bool) -> int:
         print(f"[WARN] Collection '{COLLECTION}' already exists after backup step — deleting it.")
         delete_collection(COLLECTION)
 
-    print(f"[INFO] Creating new collection: {COLLECTION} ({dst_dim}d)...")
-    create_collection(COLLECTION, dst_dim)
+    print(f"[INFO] Creating new collection: {COLLECTION} ({dst_dim}d, vector={dst_vector_name})...")
+    create_collection(COLLECTION, dst_dim, vector_name=dst_vector_name)
 
     # --- Step 3: Scroll all points from backup, re-embed, upsert ---
     print(f"[INFO] Reading all points from {backup_name}...")
@@ -322,11 +328,11 @@ def migrate(target: str, dry_run: bool) -> int:
                   f"'{backup_name}'.")
             return 1
 
-        # Build upsert payload
+        # Build upsert payload (named vectors)
         upsert_batch = [
             {
                 "id": p["id"],
-                "vector": vectors[i],
+                "vector": {dst_vector_name: vectors[i]},
                 "payload": p.get("payload", {}),
             }
             for i, p in enumerate(batch)
