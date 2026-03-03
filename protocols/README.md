@@ -28,7 +28,8 @@ protocols/
 │   └── context-engineering.md ← token budgets, compression
 ├── quality/               ← testing and verification
 │   ├── testing.md         ← benchmarks, build-up pipeline
-│   ├── cloning.md         ← isolated instances for testing
+│   ├── cloning.md         ← vertical inheritance (single parent)
+│   ├── crossbreeding.md   ← horizontal gene transfer (two parents)
 │   └── security-logging.md ← input validation, audit trail, sensitive data handling
 └── project/               ← project-specific protocols
     ├── monorepo-orchestration.md ← per-package agents, dependency-aware coordination
@@ -90,7 +91,8 @@ Quick summary:
 | Protocol | Purpose | File |
 |----------|---------|------|
 | Testing | Benchmarks, build-up pipeline | `quality/testing.md` |
-| Cloning | Isolated instances for testing | `quality/cloning.md` |
+| Cloning | Vertical inheritance — single parent reproduction | `quality/cloning.md` |
+| Crossbreeding | Horizontal gene transfer — dual-parent offspring with fitness selection | `quality/crossbreeding.md` |
 | Security Logging | Input validation, audit trail, sensitive data handling | `quality/security-logging.md` |
 | `project/` | Project-specific | Custom rules for the current project |
 

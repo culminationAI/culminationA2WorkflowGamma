@@ -1,4 +1,4 @@
-<!-- WORKFLOW_VERSION: 2.98 -->
+<!-- WORKFLOW_VERSION: 2.99 -->
 
 # CLAUDE.md — Main Workspace
 
@@ -238,6 +238,7 @@ Then Read the protocol file and inject relevant section into subagent prompt.
 | Context Engineering | Context assembly | `protocols/knowledge/context-engineering.md` |
 | Testing | Verification, benchmarks | `protocols/quality/testing.md` |
 | Cloning | Build-up pipeline | `protocols/quality/cloning.md` |
+| Crossbreeding | `/crossbreed [target]`, dual-parent offspring | `protocols/quality/crossbreeding.md` |
 | Yoga | End-to-end pipeline health check, `/yoga` | `protocols/quality/yoga.md` |
 | Security Logging | Suspicious input, validation failure | `protocols/quality/security-logging.md` |
 | Self-Healing | `/heal`, retreat cycle, Hook 7 delegation, integrity < 0.5 | `protocols/quality/self-healing.md` |
