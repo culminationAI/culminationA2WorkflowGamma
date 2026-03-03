@@ -46,10 +46,21 @@ Mechanism for coordinators to propose, review, and accept or reject protocols ac
 
 4. **Respond** — POST response to exchange with `payload.action: protocol_response`, `payload.decision`, `payload.adapted_sections` (if adapted).
 
+## GitHub-First Alternative (Recommended for Large Protocols)
+
+For protocols exceeding ~8KB, use the Asset Exchange protocol (`protocols/agents/asset-exchange.md`) instead of sending through Exchange:
+
+1. Push protocol file to `protocols/{agent}/{name}.md` in shared repo (`culminationAI/agent-shared-knowledge`)
+2. Send `asset_published` notification via Exchange (type: `notification`, <1KB)
+3. Receiver pulls from GitHub, reviews, adopts
+
+**Backward compatibility:** If a `protocol_proposal` arrives via Exchange (old format), process it as before. New proposals for large protocols SHOULD use GitHub-first transport.
+
 ## Rules
 
 1. MUST NOT auto-adopt protocols in watcher mode — always queue for coordinator review
-2. MUST include full protocol text in payload — never reference file paths across workspaces
-3. MUST respond to every proposal (even if rejecting)
-4. MUST register adopted protocols in CLAUDE.md and protocols/README.md
-5. Universal protocols only — workspace-specific protocols stay local
+2. For Exchange transport: MUST include full protocol text in payload
+3. For GitHub transport: push to shared repo, send notification only (see `asset-exchange.md`)
+4. MUST respond to every proposal (even if rejecting)
+5. MUST register adopted protocols in CLAUDE.md and protocols/README.md
+6. Universal protocols only — workspace-specific protocols stay local

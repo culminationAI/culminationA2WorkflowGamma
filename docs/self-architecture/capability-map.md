@@ -1,6 +1,6 @@
 # Capability Map — FalkVelt (_follower_)
 
-**Version:** 1.55
+**Version:** 1.65
 **Coordinator:** FalkVelt (Style: closed/robotic, Role: follower)
 **Primary coordinator:** OkiAra (_primal_ at `/Users/eliahkadu/Desktop/_primal_`)
 **User:** Eliah (style=brief+detailed, priorities=quality+speed, language=Russian)
@@ -39,7 +39,7 @@
 | Evolution | `protocols/core/evolution.md` | User correction, session end, structural gap, post-task |
 | Meditation | `protocols/core/meditation.md` | `/meditate`, 5+ sessions without meditation, 3+ corrections |
 
-### agents (4 protocols)
+### agents (8 protocols)
 
 | Name | File | Trigger |
 |------|------|---------|
@@ -47,6 +47,10 @@
 | Agent Communication | `protocols/agents/agent-communication.md` | Every agent dispatch |
 | Meta (Protocol Lifecycle) | `protocols/agents/meta.md` | Protocol CRUD, auto-creation |
 | Inter-Agent Exchange | `protocols/agents/inter-agent-exchange.md` | Multi-workspace messaging, session start |
+| Knowledge Sharing | `protocols/agents/knowledge-sharing.md` | Build-up stored (universal), incoming knowledge message |
+| Protocol Exchange | `protocols/agents/protocol-exchange.md` | New universal protocol created, protocol proposal received |
+| Shared Repo Sync | `protocols/agents/shared-repo-sync.md` | Changes to shared exchange server code |
+| Asset Exchange | `protocols/agents/asset-exchange.md` | New spec/protocol/graph created, meditation findings, `asset_published` notification |
 
 ### knowledge (3 protocols)
 
@@ -70,7 +74,7 @@
 |------|------|---------|
 | Monorepo Orchestration | `protocols/project/monorepo-orchestration.md` | Monorepo archetype detected |
 
-**Total:** 23 protocols across 5 categories (incl. protocol-exchange, shared-repo-sync, knowledge-sharing).
+**Total:** 25 protocols across 5 categories.
 
 ---
 

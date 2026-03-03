@@ -1,4 +1,4 @@
-<!-- WORKFLOW_VERSION: 1.65 -->
+<!-- WORKFLOW_VERSION: 1.75 -->
 
 # CLAUDE.md — Main Workspace
 
@@ -208,6 +208,7 @@ Then Read the protocol file and inject relevant section into subagent prompt.
 | Monorepo Orchestration | Monorepo archetype detected | `protocols/project/monorepo-orchestration.md` |
 | Inter-Agent Exchange | Multi-workspace messaging, session start | `protocols/agents/inter-agent-exchange.md` |
 | Knowledge Sharing | Build-up stored (universal), incoming knowledge message | `protocols/agents/knowledge-sharing.md` |
+| Asset Exchange | New spec/protocol/graph created, meditation findings, `asset_published` notification | `protocols/agents/asset-exchange.md` |
 
 **Build-up rule**: After EVERY user correction → MUST store via `protocols/core/build-up.md`. Enforcement: `protocols/core/evolution.md` Hook 1 (Correction Interceptor) — BLOCKING, cannot proceed until stored.
 

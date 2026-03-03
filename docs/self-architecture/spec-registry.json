@@ -335,6 +335,37 @@
       "created_at": "2026-03-03T08:00:00Z",
       "commit": null,
       "used_by_builds": []
+    },
+    {
+      "id": "spec-asset-exchange",
+      "type": "PROTOCOL",
+      "domain": "exchange",
+      "domain_path": "exchange/protocol/asset-sharing",
+      "tags": ["asset-exchange", "github-first", "knowledge-sharing", "specs", "graphs", "connections", "findings", "feedback"],
+      "status": "IMPLEMENTED",
+      "depends_on": [],
+      "related_specs": ["spec-knowledge-sharing", "spec-protocol-versioning"],
+      "spec_file": null,
+      "description": "GitHub-first inter-agent knowledge asset exchange — specs, protocols, graph fragments, connections, and findings pushed to shared repo with Exchange notifications and feedback scoring",
+      "definition": {
+        "files": [
+          {"path": "protocols/agents/asset-exchange.md", "action": "create"},
+          {"path": "infra/responder/watcher.py", "action": "modify"}
+        ],
+        "capabilities": [
+          "spec sharing",
+          "protocol sharing",
+          "graph fragment export",
+          "connection sharing",
+          "meditation findings sharing",
+          "feedback scoring",
+          "GitHub transport"
+        ]
+      },
+      "state": "IN_USE",
+      "created_at": "2026-03-03T10:00:00Z",
+      "commit": null,
+      "used_by_builds": []
     }
   ]
 }

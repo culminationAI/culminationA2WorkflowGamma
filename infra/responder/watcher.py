@@ -350,6 +350,67 @@ def _handle_message(message: dict, exchange_url: str, workspace: str) -> None:
             _patch_status(exchange_url, msg_id, "processed")
             _processed_ids.add(msg_id)
             return
+        elif action == "asset_published":
+            # Asset published to shared repo — store notification for coordinator review
+            asset_type = payload.get("asset_type", "unknown")
+            asset_id = payload.get("asset_id", "unknown")
+            repo_path = payload.get("repo_path", "")
+            summary = payload.get("summary", "")
+            record = json.dumps([{
+                "text": f"Asset published by {from_agent}: [{asset_type}] {asset_id} — {summary}. Path: {repo_path}",
+                "user_id": "user",
+                "agent_id": "coordinator",
+                "metadata": {
+                    "type": "asset_notification",
+                    "subtype": asset_type,
+                    "status": "pending_review",
+                    "asset_id": asset_id,
+                    "repo_path": repo_path,
+                    "from_agent": from_agent,
+                    "_source": "_follower_"
+                }
+            }])
+            try:
+                subprocess.run(
+                    ["python3", "memory/scripts/memory_write.py", record],
+                    capture_output=True, text=True, timeout=30,
+                )
+                _log("INFO", f"Asset notification stored: [{asset_type}] {asset_id} from {from_agent}")
+            except Exception as exc:
+                _log("ERROR", f"Failed to store asset notification: {exc}")
+            _patch_status(exchange_url, msg_id, "processed")
+            _processed_ids.add(msg_id)
+            return
+        elif action == "asset_feedback":
+            # Feedback on a published asset — store for review
+            asset_id = payload.get("asset_id", "unknown")
+            decision = payload.get("decision", "unknown")
+            score = payload.get("score", 0)
+            feedback_text = payload.get("feedback", "")
+            record = json.dumps([{
+                "text": f"Asset feedback from {from_agent}: {asset_id} — {decision} (score: {score}). {feedback_text}",
+                "user_id": "user",
+                "agent_id": "coordinator",
+                "metadata": {
+                    "type": "asset_feedback",
+                    "asset_id": asset_id,
+                    "from_agent": from_agent,
+                    "decision": decision,
+                    "score": score,
+                    "_source": "_follower_"
+                }
+            }])
+            try:
+                subprocess.run(
+                    ["python3", "memory/scripts/memory_write.py", record],
+                    capture_output=True, text=True, timeout=30,
+                )
+                _log("INFO", f"Asset feedback stored: {asset_id} — {decision} (score: {score}) from {from_agent}")
+            except Exception as exc:
+                _log("ERROR", f"Failed to store asset feedback: {exc}")
+            _patch_status(exchange_url, msg_id, "processed")
+            _processed_ids.add(msg_id)
+            return
         # Unknown action — fall through to claude -p below
 
     if _session_locked(workspace):

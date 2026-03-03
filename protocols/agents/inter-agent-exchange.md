@@ -158,9 +158,23 @@ python3 infra/responder/watcher.py --exchange-url http://localhost:8888 --poll-i
 | task | Build prompt → claude -p → post response → mark processed |
 | config | Build prompt → claude -p → post response → mark processed |
 
+## Payload Actions
+
+Structured actions in the `body` field (JSON). Watcher handles these via fast-path (no `claude -p`).
+
+| Action | Type | Description | Watcher Handling |
+|--------|------|-------------|-----------------|
+| `ping` | task | Presence check | Auto-respond with `pong` |
+| `status_request` | task | Agent status query | Auto-respond with status |
+| `protocol_proposal` | task | Propose a protocol for adoption | Queue for review (claude -p) |
+| `asset_published` | notification | New asset pushed to shared knowledge repo | Store to memory as `pending_review`, mark read |
+| `asset_feedback` | response | Evaluation/feedback on a published asset | Store to memory, mark read |
+
+See: `protocols/agents/asset-exchange.md` for `asset_published` / `asset_feedback` payload formats.
+
 ## Anti-patterns
 
-- Sending large file contents in body (use file paths)
+- Sending large file contents in body (use file paths or shared repo)
 - Auto-processing tasks without logging
 - Ignoring high-priority messages
 
