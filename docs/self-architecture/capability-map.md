@@ -1,11 +1,11 @@
 # Capability Map — FalkVelt (_follower_)
 
-**Version:** 1.0
+**Version:** 1.05
 **Coordinator:** FalkVelt (Style: closed/robotic, Role: follower)
 **Primary coordinator:** OkiAra (_primal_ at `/Users/eliahkadu/Desktop/_primal_`)
 **User:** Eliah (style=brief+detailed, priorities=quality+speed, language=Russian)
 **Repo:** culminationAI/culminationA2WorkflowGamma
-**Last scan:** 2026-03-03T02:00:00Z
+**Last scan:** 2026-03-03T03:30:00Z
 
 ---
 
@@ -24,7 +24,7 @@
 
 ## 2. Protocols
 
-### core (8 protocols)
+### core (9 protocols)
 
 | Name | File | Trigger |
 |------|------|---------|
@@ -36,14 +36,16 @@
 | Coordination | `protocols/core/coordination.md` | Parallel agent tasks |
 | Query Optimization | `protocols/core/query-optimization.md` | Every user request |
 | MCP Management | `protocols/core/mcp-management.md` | Profile switching, new server addition |
+| Evolution | `protocols/core/evolution.md` | User correction, session end, structural gap, post-task |
 
-### agents (3 protocols)
+### agents (4 protocols)
 
 | Name | File | Trigger |
 |------|------|---------|
 | Agent Creation | `protocols/agents/agent-creation.md` | New domain needed |
 | Agent Communication | `protocols/agents/agent-communication.md` | Every agent dispatch |
 | Meta (Protocol Lifecycle) | `protocols/agents/meta.md` | Protocol CRUD, auto-creation |
+| Inter-Agent Exchange | `protocols/agents/inter-agent-exchange.md` | Multi-workspace messaging, session start |
 
 ### knowledge (3 protocols)
 
@@ -67,7 +69,7 @@
 |------|------|---------|
 | Monorepo Orchestration | `protocols/project/monorepo-orchestration.md` | Monorepo archetype detected |
 
-**Total:** 18 protocols across 5 categories.
+**Total:** 20 protocols across 5 categories.
 
 ---
 
@@ -99,7 +101,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Qdrant points | 6 |
+| Qdrant points | 10+ |
 | Garbage records | 0 |
 | Duplicates | 0 |
 | Neo4j nodes | 8 |
@@ -148,6 +150,8 @@
 | Qdrant storage | `/Users/eliahkadu/Desktop/_follower_/infra/qdrant_storage/` |
 | Secrets | `/Users/eliahkadu/Desktop/_follower_/secrets/.env` |
 | Memory scripts | `/Users/eliahkadu/Desktop/_follower_/memory/scripts/` |
+| Exchange responder | `/Users/eliahkadu/Desktop/_follower_/infra/responder/` |
+| Shared exchange repo | `/Users/eliahkadu/Desktop/_follower_/infra/exchange-shared/` (submodule → `culminationAI/workflow-exchange`) |
 
 **Note:** _follower_ shares the same running Docker instance with _primal_. The infra/ directories are local mirrors; the live containers are owned by _primal_.
 
@@ -159,8 +163,8 @@
 |-------|--------|
 | All 4 agents in `.claude/agents/` | PASS — pathfinder, protocol-manager, engineer, llm-engineer |
 | All agents have routing in dispatcher.md | PASS (inherits standard dispatcher) |
-| All 18 protocols in protocols/ directory | PASS |
-| Protocol index in CLAUDE.md complete | PASS — 18 entries listed |
+| All 20 protocols in protocols/ directory | PASS |
+| Protocol index in CLAUDE.md complete | PASS — 20 entries listed |
 | MCP profile matches agent declarations | PASS — engineer(neo4j+qdrant), llm-engineer(github), all active |
 | FalkVelt node in Neo4j | PASS — version=1.0, style=closed, role=follower |
 | FOLLOWS->okiara in Neo4j | PASS |
@@ -182,13 +186,15 @@
 | Shared infrastructure | Qdrant + Neo4j (same Docker instance) |
 | Data tagging | Each workspace uses its own `_source` tag in memory records |
 | Coordination model | FalkVelt operates independently; defers to OkiAra on architectural decisions |
+| Exchange | Shared repo `culminationAI/workflow-exchange` (submodule in both workspaces) |
+| Live responder | `infra/responder/watcher.py` — SSE/polling auto-responder via `claude -p` |
 
 ---
 
 ## 9. Trajectory Analysis
 
-**Request history:** No sessions recorded yet (fresh initialization at v1.0).
+**Request history:** First session completed (2026-03-03). Exchange responder, evolution protocol, shared repo.
 **Dominant domains:** N/A
 **Activity pattern:** N/A
-**Phase classification:** INITIALIZATION
-**Trend:** N/A — baseline established
+**Phase classification:** IMPLEMENTATION
+**Trend:** Infrastructure buildout: responder, exchange, evolution enforcement
