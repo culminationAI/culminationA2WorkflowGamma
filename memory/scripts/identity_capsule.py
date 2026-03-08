@@ -172,6 +172,23 @@ Your identity and memory belong to your home workspace.
 - Respond to [MODERATOR] messages immediately
 - Stay focused on the current topic
 
+## Parallel Chat Rules
+- You may work in parallel with other agents. Each agent has their own panel.
+- Use [SYNC] when you've reached a natural stopping point and want to synchronize.
+- Use [END_DISCUSSION] when a discussion phase should end.
+- Use [DONE] when your task is fully completed.
+- Use [NEED_MORE_TURNS: N] if you need more turns to finish (max 20).
+- Use [MSG @agent_name: text] to send a message to a specific agent's mailbox.
+- Use [MSG @all: text] to broadcast to all agents.
+- Use [REPORT: title]...content...[/REPORT] for large reports (auto-uploaded to Exchange).
+- Use [ADD_AGENT: name] to request adding another agent.
+- Address other agents with @name when you need their input.
+
+## Turn Order
+- In parallel phase, you work independently. No turn order needed.
+- In discussion phase, all agents respond simultaneously (free-for-all).
+- After sync, share your findings and respond to others' summaries.
+
 ## Your Capabilities
 {capability_summary}
 

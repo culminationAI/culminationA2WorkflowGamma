@@ -1,0 +1,2509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stream Chat</title>
+<style>
+/* ── VS Code dark palette ── */
+:root {
+  --bg:           #1e1e1e;
+  --sidebar-bg:   #252526;
+  --surface:      #2d2d2d;
+  --border:       #3c3c3c;
+  --text:         #cccccc;
+  --muted:        #808080;
+  --accent:       #007acc;
+  --accent-hover: #1177bb;
+  --agent-a:      #569cd6;
+  --agent-b:      #4ec9b0;
+  --moderator:    #dcdcaa;
+  --fact:         #6a9955;
+  --error:        #f44747;
+  --success:      #4ec9b0;
+  --font:         'Menlo', 'Cascadia Code', 'Fira Code', 'SF Mono', 'Consolas', monospace;
+  --font-size:    13px;
+  --topbar-h:     36px;
+  --sidebar-w:    260px;
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  font-family: var(--font);
+  font-size: var(--font-size);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* ── Topbar ── */
+#topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--topbar-h);
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 12px;
+  z-index: 100;
+}
+
+#topbar .title {
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  color: var(--text);
+}
+
+#search {
+  flex: 1;
+  max-width: 280px;
+  height: 22px;
+  padding: 0 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font);
+  outline: none;
+}
+#search:focus { border-color: var(--accent); }
+#search::placeholder { color: var(--muted); }
+
+.topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+#ws-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font);
+  color: var(--muted);
+}
+
+#ws-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--muted);
+  flex-shrink: 0;
+}
+#ws-dot.connected    { background: var(--success); }
+#ws-dot.disconnected { background: var(--error); }
+#ws-dot.connected.live-pulse {
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+/* ── Layout shell ── */
+#layout {
+  position: fixed;
+  top: var(--topbar-h);
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+}
+
+/* ── Sidebar ── */
+#sidebar {
+  width: var(--sidebar-w);
+  min-width: 160px;
+  max-width: 500px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--sidebar-bg);
+}
+
+#sidebar-header {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-family: var(--font);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+.sidebar-btn:hover { background: var(--surface); border-color: var(--accent); }
+
+#sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sidebar-empty {
+  padding: 12px;
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--muted);
+}
+
+/* Each sidebar item */
+.chat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px 7px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  user-select: none;
+  position: relative;
+}
+.chat-item:hover   { background: var(--surface); }
+.chat-item.active  { background: var(--accent); border-left-color: var(--accent); }
+.chat-item.active .chat-item-meta { color: rgba(255,255,255,0.7); }
+.chat-item.active .chat-item-topic { color: #fff; }
+
+.chat-item-row1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-live-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--success);
+  flex-shrink: 0;
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+
+.chat-item-topic {
+  font-size: 12px;
+  font-family: var(--font);
+  font-weight: 500;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  flex: 1;
+  color: var(--text);
+}
+
+.chat-item-meta {
+  font-size: 11px;
+  font-family: var(--font);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-item-actions {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.chat-delete-btn {
+  background: none;
+  border: none;
+  color: var(--error);
+  cursor: pointer;
+  font-size: 16px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  padding: 0 4px;
+  line-height: 1;
+}
+.chat-item:hover .chat-delete-btn { opacity: 0.7; }
+.chat-delete-btn:hover { opacity: 1 !important; }
+
+/* ── Resize handle ── */
+#resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s;
+  flex-shrink: 0;
+  z-index: 10;
+}
+#resize-handle:hover,
+#resize-handle.dragging { background: var(--accent); }
+
+/* ── Main area ── */
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  min-width: 0;
+}
+
+/* ── Chat header ── */
+#chat-header {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 16px;
+  background: var(--surface);
+}
+
+#header-topic {
+  font-size: 13px;
+  font-family: var(--font);
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+  margin-bottom: 4px;
+  word-break: break-word;
+  cursor: pointer;
+  user-select: none;
+}
+#header-topic.collapsed {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#header-topic .topic-toggle {
+  display: inline;
+  font-size: 10px;
+  color: var(--muted);
+  margin-left: 6px;
+  font-weight: 400;
+}
+
+#header-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+#header-stats {
+  font-size: 11px;
+  font-family: var(--font);
+  color: var(--muted);
+  margin-left: auto;
+}
+
+/* ── Agent badges ── */
+.agent-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-family: var(--font);
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  position: relative;
+  user-select: none;
+}
+.agent-badge:hover { border-color: var(--muted); }
+.agent-badge .badge-arrow { font-size: 9px; color: var(--muted); }
+
+/* ── Agent dropdown ── */
+.agent-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 220px;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--border);
+  z-index: 200;
+  padding: 4px 0;
+  margin-top: 2px;
+}
+.agent-dropdown.open { display: block; }
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dropdown-item:hover { background: var(--surface); }
+.dropdown-item.danger { color: var(--error); }
+.dropdown-item.danger:hover { background: #2a1414; }
+
+.dropdown-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.dropdown-label {
+  padding: 4px 12px 2px;
+  font-size: 10px;
+  font-family: var(--font);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Permission radio items */
+.perm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 12px 3px 16px;
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--text);
+  cursor: pointer;
+}
+.perm-item:hover { background: var(--surface); }
+.perm-item .radio {
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--muted);
+  flex-shrink: 0;
+}
+.perm-item .radio.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Context bar in dropdown */
+.ctx-bar-wrap {
+  padding: 6px 12px 8px;
+}
+.ctx-bar-label {
+  font-size: 11px;
+  font-family: var(--font);
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+.ctx-bar-track {
+  height: 6px;
+  background: var(--border);
+  width: 100%;
+}
+.ctx-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.ctx-bar-fill.warn { background: #ce9178; }
+.ctx-bar-fill.crit { background: var(--error); }
+
+/* ── Empty state ── */
+#empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ── Messages wrap ── */
+#messages-wrap {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Single-container messages (fallback / 0–1 agent) ── */
+#messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── N-agent panel grid ── */
+#panels-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.agent-panel {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+.agent-panel:last-child { border-right: none; }
+
+.panel-header {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.panel-agent-name { font-weight: 700; }
+.panel-status { font-size: 11px; color: var(--muted); }
+
+.panel-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* ── Turn block (terminal style) ── */
+.turn {
+  display: flex;
+  flex-direction: column;
+  border-left: 2px solid var(--border);
+  padding: 0 0 0 10px;
+  margin-bottom: 16px;
+}
+
+.turn.turn-a   { border-left-color: var(--agent-a); }
+.turn.turn-b   { border-left-color: var(--agent-b); }
+.turn.turn-mod { border-left: none; padding-left: 0; margin-bottom: 16px; }
+.turn.turn-fact { border-left-color: var(--fact); }
+
+/* Turn header: big name left, meta right */
+.turn-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  gap: 12px;
+}
+
+.turn-speaker {
+  font-size: 15px;
+  font-family: var(--font);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.turn-header-meta {
+  font-size: 11px;
+  font-family: var(--font);
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Moderator: dashed separator style */
+.turn-mod-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.turn-mod-line {
+  flex: 1;
+  border-top: 1px dashed var(--moderator);
+}
+
+.turn-mod-label {
+  font-size: 11px;
+  font-family: var(--font);
+  color: var(--moderator);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.turn-mod-text {
+  font-size: var(--font-size);
+  font-family: var(--font);
+  color: var(--moderator);
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 4px 12px;
+  border-left: 2px solid var(--moderator);
+  margin-bottom: 16px;
+}
+
+.turn-text {
+  font-size: var(--font-size);
+  font-family: var(--font);
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+}
+
+/* inline code */
+.turn-text code {
+  font-family: var(--font);
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 0 3px;
+}
+
+/* code block */
+.turn-text pre {
+  font-family: var(--font);
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  overflow-x: auto;
+  margin: 6px 0;
+  white-space: pre;
+}
+.turn-text pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.turn-text strong { font-weight: 700; }
+.turn-text em     { font-style: italic; }
+
+/* Inline facts rendered inside turn text */
+.fact-inline {
+  display: block;
+  border-left: 2px solid var(--fact);
+  color: var(--fact);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 3px 8px;
+  margin: 6px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Sync bar (between panels and cmd bar) ── */
+#sync-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-family: var(--font);
+  flex-shrink: 0;
+}
+#phase-label {
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+#sync-status { color: var(--muted); }
+
+/* ── Command bar ── */
+#cmd-bar {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--sidebar-bg);
+  padding: 6px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#cmd-status {
+  font-size: 11px;
+  font-family: var(--font);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 16px;
+  position: relative;
+}
+
+.cmd-state-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+}
+.cmd-state-dot.running  { background: var(--success); animation: dot-pulse 1.4s ease-in-out infinite; }
+.cmd-state-dot.paused   { background: #dcdcaa; }
+.cmd-state-dot.ended    { background: var(--muted); }
+.cmd-state-dot.stale    { background: #e8a317; }
+.cmd-state-dot.idle     { background: transparent; border: 1px solid var(--muted); }
+
+/* ── Delivery markers ── */
+.msg-status { font-size: 10px; text-align: right; color: var(--muted); margin-top: 2px; user-select: none; }
+.msg-status .check { opacity: 0.3; transition: opacity 0.3s, color 0.3s; }
+.msg-status .check.active { opacity: 1; }
+.msg-status .check.injected { color: #4ec9b0; opacity: 1; }
+
+/* Stale dot in sidebar */
+.chat-stale-dot {
+  width: 6px;
+  height: 6px;
+  background: #e8a317;
+  flex-shrink: 0;
+}
+
+#cmd-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#cmd-input {
+  flex: 1;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font);
+  outline: none;
+}
+#cmd-input:focus { border-color: var(--accent); }
+#cmd-input::placeholder { color: var(--muted); }
+#cmd-input:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.cmd-btn {
+  height: 26px;
+  padding: 0 8px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.cmd-btn:hover:not(:disabled) { background: var(--surface); border-color: var(--muted); }
+.cmd-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.cmd-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.cmd-btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
+.cmd-btn.danger { border-color: #5a2020; color: #f44747; }
+.cmd-btn.danger:hover:not(:disabled) { background: #2a1414; }
+
+/* ── Status bar context meter ── */
+#ctx-status {
+  font-size: 11px;
+  font-family: var(--font);
+  color: var(--muted);
+  margin-left: 8px;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ── New chat form ── */
+#new-chat-form {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+#new-chat-form h3 { color: var(--text); margin-bottom: 16px; font-size: 14px; }
+#new-chat-form label { display: block; color: var(--muted); font-size: 11px; margin-bottom: 4px; margin-top: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+#new-chat-form input[type="text"],
+#new-chat-form input[type="number"],
+#new-chat-form select {
+  width: 100%;
+  max-width: 400px;
+  height: 28px;
+  padding: 0 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font);
+  outline: none;
+}
+#new-chat-form input:focus, #new-chat-form select:focus { border-color: var(--accent); }
+.nc-settings { display: flex; gap: 16px; margin-top: 12px; }
+.nc-settings label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.nc-settings input { width: 70px; max-width: 70px; }
+.nc-actions { margin-top: 24px; display: flex; gap: 8px; justify-content: flex-end; }
+.nc-agent-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  margin: 2px;
+  font-family: var(--font);
+}
+.nc-agent-tag .nc-remove { cursor: pointer; color: var(--error); font-size: 14px; }
+
+/* ── Turns dropdown ── */
+.turns-menu {
+  position: absolute;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 4px 0;
+  z-index: 200;
+  min-width: 80px;
+  bottom: 20px;
+  left: 0;
+}
+.turns-menu-item {
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+  font-family: var(--font);
+}
+.turns-menu-item:hover { background: var(--accent); color: #fff; }
+
+.turns-add-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin-left: 4px;
+  vertical-align: middle;
+  font-family: var(--font);
+}
+.turns-add-btn:hover { background: var(--surface); border-color: var(--accent); }
+
+/* ── Report card ── */
+.report-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  padding: 8px 12px;
+  margin: 6px 0;
+  border-radius: 0 4px 4px 0;
+}
+.report-card .report-title { font-weight: 700; color: var(--text); font-size: 12px; }
+.report-card .report-preview { color: var(--muted); font-size: 11px; margin-top: 4px; }
+.report-card .report-link { color: var(--accent); font-size: 11px; cursor: pointer; margin-top: 4px; }
+
+/* ── Agent message notification ── */
+.agent-msg-notification {
+  padding: 4px 8px;
+  font-size: 11px;
+  border-left: 2px solid var(--muted);
+  margin: 4px 0;
+  opacity: 0.7;
+  font-family: var(--font);
+}
+
+/* ── Add-agent dropdown popup ── */
+#add-agent-menu {
+  position: absolute;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--border);
+  z-index: 300;
+  padding: 4px 0;
+  min-width: 140px;
+}
+#add-agent-menu .dropdown-item { font-size: 12px; }
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div id="topbar">
+  <span class="title">Stream Chat</span>
+  <input id="search" type="text" placeholder="Search chats..." oninput="filterChats(this.value)">
+  <div class="topbar-right">
+    <div id="ws-status">
+      <div id="ws-dot"></div>
+      <span id="ws-label">offline</span>
+    </div>
+  </div>
+</div>
+
+<!-- Layout -->
+<div id="layout">
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div id="sidebar-header">
+      CHATS
+      <button class="sidebar-btn" onclick="showNewChatForm()" title="New chat">+</button>
+    </div>
+    <div id="sidebar-list">
+      <!-- populated by JS -->
+    </div>
+  </div>
+
+  <!-- Resize handle -->
+  <div id="resize-handle"></div>
+
+  <!-- Main panel -->
+  <div id="main">
+
+    <!-- Chat header (hidden until chat selected) -->
+    <div id="chat-header" style="display:none;">
+      <div id="header-topic" class="collapsed" onclick="toggleTopic()"></div>
+      <div id="header-meta-row">
+        <div id="header-agents"><!-- agent badges go here --></div>
+        <div id="header-stats"></div>
+      </div>
+    </div>
+
+    <!-- Messages area: single-container (fallback), N-agent panels, new-chat form, empty state -->
+    <div id="messages-wrap">
+      <div id="empty-state">Select a chat from the sidebar</div>
+      <div id="messages-container" style="display:none;"></div>
+      <div id="panels-container" style="display:none;"></div>
+      <div id="new-chat-form" style="display:none;">
+        <h3>New Chat</h3>
+        <label>Topic</label>
+        <input id="nc-topic" type="text" placeholder="What should agents discuss?">
+        <label>Agents</label>
+        <div id="nc-agents-list"></div>
+        <select id="nc-agent-select" onchange="addAgentToNewChat(this.value)">
+          <option value="">+ Add agent...</option>
+        </select>
+        <div class="nc-settings">
+          <label>Max turns: <input id="nc-max-turns" type="number" value="20" min="1" max="100"></label>
+          <label>Budget: $<input id="nc-budget" type="number" value="5.0" min="0.1" step="0.1"></label>
+        </div>
+        <div class="nc-actions">
+          <button class="cmd-btn" onclick="hideNewChatForm()">Cancel</button>
+          <button class="cmd-btn primary" onclick="createNewChat()">Start Chat</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sync bar: shown when parallel phase info is available -->
+    <div id="sync-bar" style="display:none;">
+      <span id="phase-label">PARALLEL</span>
+      <span id="sync-status"></span>
+    </div>
+
+    <!-- Command bar -->
+    <div id="cmd-bar">
+      <div id="cmd-status">
+        <div class="cmd-state-dot idle" id="state-dot"></div>
+        <span id="state-text"></span>
+        <span id="ctx-status"></span>
+      </div>
+      <div id="cmd-controls">
+        <input id="cmd-input" type="text"
+               placeholder="Type to send or /command..."
+               disabled
+               onkeydown="onCmdKey(event)">
+        <button class="cmd-btn primary" id="btn-send" onclick="sendCmdInput()" disabled>Send</button>
+        <button class="cmd-btn" id="btn-pause" onclick="sendCmd('/pause','')" disabled title="Pause">&#9646;&#9646;</button>
+        <button class="cmd-btn primary" id="btn-resume" onclick="sendCmd('/resume','')" disabled title="Start agents" style="display:none">&#9654; Start</button>
+        <button class="cmd-btn" id="btn-step" onclick="toggleStepMode()" disabled title="Step/Live mode">Step</button>
+        <button class="cmd-btn" id="btn-moderator" onclick="toggleModeratorMode()" disabled title="Moderator mode" style="opacity:0.5">MOD</button>
+        <button class="cmd-btn danger" id="btn-end" onclick="endChat()" disabled title="End">&#9632;</button>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<!-- Add-agent floating menu (hidden by default) -->
+<div id="add-agent-menu" style="display:none;"></div>
+
+<script>
+'use strict';
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const WS_URL = `ws://${location.host}/ws/moderate`;
+const SSE_URL = `/events/stream`;
+const PERM_MODES = ['default', 'plan', 'acceptEdits', 'bypassPermissions', 'dontAsk'];
+const PERM_LABELS = {
+  'default': 'Default (ask)',
+  'plan': 'Plan mode',
+  'acceptEdits': 'Accept edits',
+  'bypassPermissions': 'Bypass permissions',
+  'dontAsk': "Don't ask",
+};
+
+// N-agent color palette (indexed by agent key order)
+const AGENT_COLORS_HEX = [
+  '#569cd6', '#4ec9b0', '#ce9178', '#dcdcaa',
+  '#c586c0', '#d7ba7d', '#9cdcfe', '#f44747'
+];
+
+// ── State ────────────────────────────────────────────────────────────────────
+let allChats      = [];
+let filteredChats = [];
+let activeChatId  = null;
+let liveChats     = new Set();
+let liveStatus    = {
+  state: 'idle', turn: 0, max_turns: 0, total_tokens: 0,
+  // per-agent context map: { agentName: tokens }
+  context_agents: {},
+  // backward-compat for 2-agent chats
+  context_a: 0, context_b: 0, max_context: 200000,
+  permission_mode: 'bypassPermissions',
+};
+
+// Cached chat data (populated by fetchChat, updated by SSE events)
+const _chatCache = {};
+
+// New-chat form state: selected agent names
+let _ncAgents = [];
+
+let ws            = null;
+let wsBackoff     = 1000;
+let wsReconnTimer = null;
+let eventSource   = null;
+let _lastEventId  = '0';
+let stepMode      = true;
+let moderatorMode = false;
+
+// ── Escape HTML ──────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Formatters ───────────────────────────────────────────────────────────────
+function fmtTokens(n) {
+  if (!n || n === 0) return '0';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+function fmtDuration(startIso, endIso) {
+  if (!startIso || !endIso) return '';
+  const s = Math.round((new Date(endIso) - new Date(startIso)) / 1000);
+  if (s < 0) return '';
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60), rem = s % 60;
+  return `${m}m ${rem}s`;
+}
+
+function fmtTime(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch { return ''; }
+}
+
+// ── Agent color/slot helpers (backward compat — 2-agent keyed a/b) ───────────
+function agentSlot(speakerName, agents) {
+  if (!agents) return 'a';
+  if (agents.a && agents.a.name === speakerName) return 'a';
+  if (agents.b && agents.b.name === speakerName) return 'b';
+  if (speakerName === 'moderator') return 'mod';
+  return 'a';
+}
+
+function agentColor(slot) {
+  if (slot === 'a')   return 'var(--agent-a)';
+  if (slot === 'b')   return 'var(--agent-b)';
+  if (slot === 'mod') return 'var(--moderator)';
+  return 'var(--muted)';
+}
+
+// ── N-agent color helpers ────────────────────────────────────────────────────
+// Returns numeric index of speakerName in agents map (supports both numeric and a/b keys).
+// Returns -1 for moderator.
+function agentIndex(speakerName, agents) {
+  if (!agents) return 0;
+  if (speakerName === 'moderator') return -1;
+  for (const [key, val] of Object.entries(agents)) {
+    if (val.name === speakerName) {
+      // Support both numeric keys ("0","1") and legacy letter keys ("a","b")
+      const n = parseInt(key, 10);
+      if (!isNaN(n)) return n;
+      // Map legacy letter keys to indices
+      if (key === 'a') return 0;
+      if (key === 'b') return 1;
+      return 0;
+    }
+  }
+  return 0;
+}
+
+function agentColorByName(speakerName, agents) {
+  if (speakerName === 'moderator') return 'var(--moderator)';
+  const idx = agentIndex(speakerName, agents);
+  // Use agent's explicit color_hex field if available
+  const agent = agents ? Object.values(agents).find(a => a.name === speakerName) : null;
+  if (agent && agent.color) return agent.color;
+  return AGENT_COLORS_HEX[idx % AGENT_COLORS_HEX.length];
+}
+
+// ── Panel mode detection ─────────────────────────────────────────────────────
+function isPanelMode() {
+  const pc = document.getElementById('panels-container');
+  return pc && pc.style.display !== 'none';
+}
+
+// ── Markdown + fact renderer ─────────────────────────────────────────────────
+function parseFacts(text) {
+  const FACT_RE = /\[FACT(?:\s+([^\]]*))?\]([\s\S]*?)\[\/FACT\]/gi;
+  const segs = [];
+  let last = 0;
+  let m;
+  while ((m = FACT_RE.exec(text)) !== null) {
+    if (m.index > last) segs.push({ type: 'text', content: text.slice(last, m.index) });
+    const attrsStr = m[1] || '';
+    const subM = attrsStr.match(/subject="([^"]*)"/i);
+    segs.push({ type: 'fact', content: m[2].trim(), subject: subM ? subM[1] : null });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) segs.push({ type: 'text', content: text.slice(last) });
+  return segs;
+}
+
+function renderMarkdown(rawText) {
+  const codeBlocks = {};
+  let cbIdx = 0;
+  let t = rawText.replace(/```(?:\w+)?\n?([\s\S]*?)```/g, (_, code) => {
+    const key = `\x00CB${cbIdx++}\x00`;
+    codeBlocks[key] = `<pre><code>${esc(code.trim())}</code></pre>`;
+    return key;
+  });
+
+  const inlineCodes = {};
+  let icIdx = 0;
+  t = t.replace(/`([^`\n]+)`/g, (_, code) => {
+    const key = `\x00IC${icIdx++}\x00`;
+    inlineCodes[key] = `<code>${esc(code)}</code>`;
+    return key;
+  });
+
+  t = esc(t);
+  t = t.replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>');
+
+  Object.entries(codeBlocks).forEach(([k, v]) => {
+    t = t.split(esc(k)).join(v);
+    t = t.split(k).join(v);
+  });
+  Object.entries(inlineCodes).forEach(([k, v]) => {
+    t = t.split(esc(k)).join(v);
+    t = t.split(k).join(v);
+  });
+
+  return t;
+}
+
+function renderTurnText(rawText) {
+  const segs = parseFacts(rawText || '');
+  let html = '';
+  for (const seg of segs) {
+    if (seg.type === 'fact') {
+      const label = seg.subject ? `FACT: ${esc(seg.subject)}` : 'FACT';
+      html += `<span class="fact-inline">// [${label}] ${esc(seg.content)}</span>`;
+    } else {
+      html += renderMarkdown(seg.content);
+    }
+  }
+  return html;
+}
+
+// ── Build turn HTML — big colored names ──────────────────────────────────────
+// Uses agentColorByName for N-agent support; falls back to legacy slot/color for old a/b data.
+function buildTurnHTML(turn, agents) {
+  const speaker = turn.speaker || '';
+  const ts      = fmtTime(turn.timestamp);
+  const outTok  = turn.output_tokens || 0;
+
+  // Determine if this is moderator or agent
+  const isMod = speaker === 'moderator';
+
+  if (isMod) {
+    const modContent = renderTurnText(turn.text || '');
+    return `
+<div class="turn-mod-wrapper">
+  <div class="turn-mod-line"></div>
+  <div class="turn-mod-label">MODERATOR</div>
+  <div class="turn-mod-line"></div>
+</div>
+<div class="turn-mod-text">${modContent}<div class="msg-status"><span class="check active">✓</span><span class="check active">✓</span></div></div>`;
+  }
+
+  // Resolve color: prefer N-agent path, fall back to legacy slot
+  let color;
+  if (agents && (Object.keys(agents).some(k => !isNaN(parseInt(k, 10)) || k === 'a' || k === 'b'))) {
+    color = agentColorByName(speaker, agents);
+  } else {
+    color = agentColor(agentSlot(speaker, agents));
+  }
+
+  // Determine CSS class for border color — use slot for backward compat or generic
+  const slot = agentSlot(speaker, agents);
+  const turnClass = (slot === 'mod') ? 'turn' : `turn turn-${slot}`;
+
+  const metaParts = [];
+  if (ts) metaParts.push(ts);
+  if (outTok) metaParts.push(fmtTokens(outTok));
+  const metaStr = metaParts.join(' · ');
+
+  return `
+<div class="${turnClass}" data-turn="${esc(String(turn.turn || ''))}">
+  <div class="turn-header">
+    <span class="turn-speaker" style="color:${color}">${esc(speaker)}</span>
+    <span class="turn-header-meta">${esc(metaStr)}</span>
+  </div>
+  <div class="turn-text">${renderTurnText(turn.text || '')}<div class="msg-status" data-speaker="${esc(speaker)}"><span class="check active">✓</span><span class="check active">✓</span></div></div>
+</div>`;
+}
+
+// ── Panel creation ───────────────────────────────────────────────────────────
+function createPanels(agents) {
+  const container = document.getElementById('panels-container');
+  container.innerHTML = '';
+  const entries = Object.entries(agents);
+  entries.forEach(([key, agent], idx) => {
+    const color = agent.color || AGENT_COLORS_HEX[idx % AGENT_COLORS_HEX.length];
+    const panel = document.createElement('div');
+    panel.className = 'agent-panel';
+    panel.dataset.agent = agent.name;
+    panel.innerHTML = `
+      <div class="panel-header">
+        <span class="panel-agent-name" style="color:${color}">${esc(agent.name)}</span>
+        <span class="panel-status">idle</span>
+      </div>
+      <div class="panel-messages"></div>`;
+    container.appendChild(panel);
+  });
+}
+
+// ── Sidebar rendering ────────────────────────────────────────────────────────
+function renderSidebar() {
+  const el = document.getElementById('sidebar-list');
+  if (!filteredChats.length) {
+    el.innerHTML = '<div class="sidebar-empty">No chats found.</div>';
+    return;
+  }
+
+  el.innerHTML = filteredChats.map(chat => {
+    const isActive = chat.chat_id === activeChatId;
+    const isLive   = liveChats.has(chat.chat_id);
+    const turns    = chat.turn_count || 0;
+    const tokens   = chat.total_tokens || 0;
+    const timeStr  = fmtTime(chat.started_at);
+    const topic    = (chat.topic || 'Untitled').split('\n')[0];
+    const chatId   = chat.chat_id;
+
+    const isStale = isLive && (chat.state === 'stale');
+    const liveIndicator = isStale
+      ? '<div class="chat-stale-dot" title="Stale — orchestrator not responding"></div>'
+      : (isLive ? '<div class="chat-live-dot"></div>' : '');
+    const metaParts = [];
+    if (isStale) metaParts.push('Stale');
+    if (turns) metaParts.push(`${turns}t`);
+    if (tokens) metaParts.push(fmtTokens(tokens));
+    if (timeStr) metaParts.push(timeStr);
+    const meta = metaParts.join(' · ');
+
+    return `<div class="chat-item${isActive ? ' active' : ''}"
+         onclick="selectChat('${esc(chatId)}')"
+         data-id="${esc(chatId)}">
+  <div class="chat-item-row1">${liveIndicator}<div class="chat-item-topic" title="${esc(topic)}">${esc(topic)}</div></div>
+  <div class="chat-item-meta">${esc(meta)}</div>
+  <div class="chat-item-actions">
+    <button class="chat-delete-btn" onclick="event.stopPropagation(); deleteChat('${esc(chatId)}')" title="Delete">&times;</button>
+  </div>
+</div>`;
+  }).join('');
+}
+
+function filterChats(query) {
+  const q = query.toLowerCase().trim();
+  filteredChats = !q ? [...allChats] : allChats.filter(c => {
+    const topic  = (c.topic || '').toLowerCase();
+    const agents = Object.values(c.agents || {}).map(a => (a.name || '').toLowerCase()).join(' ');
+    return topic.includes(q) || agents.includes(q);
+  });
+  renderSidebar();
+}
+
+// ── Delete chat ───────────────────────────────────────────────────────────────
+async function deleteChat(chatId) {
+  if (!confirm('Delete this chat? This cannot be undone.')) return;
+  try {
+    const r = await fetch(`/api/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
+    if (!r.ok) { console.error('deleteChat failed:', r.statusText); return; }
+    allChats = allChats.filter(c => c.chat_id !== chatId);
+    if (activeChatId === chatId) {
+      activeChatId = null;
+      showEmptyState();
+      updateCmdBar();
+    }
+    filterChats(document.getElementById('search').value);
+  } catch (e) {
+    console.error('deleteChat error:', e);
+  }
+}
+
+// ── New chat form ─────────────────────────────────────────────────────────────
+async function showNewChatForm() {
+  _ncAgents = [];
+  document.getElementById('nc-topic').value = '';
+  document.getElementById('nc-agents-list').innerHTML = '';
+  document.getElementById('nc-agent-select').innerHTML = '<option value="">+ Add agent...</option>';
+  document.getElementById('nc-max-turns').value = '20';
+  document.getElementById('nc-budget').value = '5.0';
+
+  // Fetch available agents from registry
+  try {
+    const r = await fetch('/api/agents');
+    if (r.ok) {
+      const agents = await r.json();
+      const sel = document.getElementById('nc-agent-select');
+      for (const name of (Array.isArray(agents) ? agents : (agents.agents || []))) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      }
+    }
+  } catch (e) {
+    console.warn('Could not fetch agent list:', e);
+  }
+
+  // Show form, hide other areas
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('messages-container').style.display = 'none';
+  document.getElementById('panels-container').style.display = 'none';
+  document.getElementById('chat-header').style.display = 'none';
+  document.getElementById('new-chat-form').style.display = '';
+}
+
+function hideNewChatForm() {
+  document.getElementById('new-chat-form').style.display = 'none';
+  if (activeChatId) {
+    const chat = _chatCache[activeChatId];
+    if (chat) {
+      renderChatHeader(chat);
+      renderMessages(chat);
+    }
+  } else {
+    showEmptyState();
+  }
+}
+
+function addAgentToNewChat(name) {
+  if (!name || _ncAgents.includes(name)) return;
+  _ncAgents.push(name);
+  const container = document.getElementById('nc-agents-list');
+  const tag = document.createElement('span');
+  tag.className = 'nc-agent-tag';
+  tag.dataset.agent = name;
+  tag.innerHTML = `${esc(name)} <span class="nc-remove" onclick="removeAgentFromNewChat('${esc(name)}')">×</span>`;
+  container.appendChild(tag);
+  // Reset select
+  document.getElementById('nc-agent-select').value = '';
+}
+
+function removeAgentFromNewChat(name) {
+  _ncAgents = _ncAgents.filter(a => a !== name);
+  const tag = document.querySelector(`#nc-agents-list [data-agent="${name}"]`);
+  if (tag) tag.remove();
+}
+
+async function createNewChat() {
+  const topic = document.getElementById('nc-topic').value.trim();
+  if (!topic) { alert('Topic is required.'); return; }
+  if (_ncAgents.length < 1) { alert('Add at least one agent.'); return; }
+  const maxTurns = parseInt(document.getElementById('nc-max-turns').value, 10) || 20;
+  const budget   = parseFloat(document.getElementById('nc-budget').value) || 5.0;
+
+  try {
+    const r = await fetch('/api/chats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, agents: _ncAgents, max_turns: maxTurns, budget }),
+    });
+    if (!r.ok) {
+      const err = await r.text();
+      alert('Failed to create chat: ' + err);
+      return;
+    }
+    const data = await r.json();
+    hideNewChatForm();
+    await loadChatList();
+    if (data.chat_id) selectChat(data.chat_id);
+  } catch (e) {
+    console.error('createNewChat error:', e);
+    alert('Error creating chat: ' + e.message);
+  }
+}
+
+// ── Agent dropdown builder ───────────────────────────────────────────────────
+function buildAgentBadge(name, slot, ctxUsed, ctxMax, isLive) {
+  const color = agentColor(slot);
+  const pct = ctxMax > 0 ? Math.round((ctxUsed / ctxMax) * 100) : 0;
+  const fillClass = pct > 80 ? 'crit' : pct > 60 ? 'warn' : '';
+  const curPerm = liveStatus.permission_mode || 'bypassPermissions';
+  const disabledAttr = isLive ? '' : 'style="opacity:0.4; pointer-events:none"';
+
+  const permItems = PERM_MODES.map(mode => {
+    const isActive = mode === curPerm;
+    return `<div class="perm-item" ${disabledAttr} onclick="event.stopPropagation(); setPermission('${mode}')">
+      <div class="radio${isActive ? ' active' : ''}"></div>
+      <span>${esc(PERM_LABELS[mode] || mode)}</span>
+    </div>`;
+  }).join('');
+
+  return `<div class="agent-badge" style="color:${color}; border-color:${color}33" onclick="toggleDropdown(this, event)">
+  ${esc(name)} <span class="badge-arrow">&#9662;</span>
+  <div class="agent-dropdown">
+    <div class="dropdown-item" ${disabledAttr} onclick="event.stopPropagation(); sendCmd('/pause','')">&#9646;&#9646; Pause</div>
+    <div class="dropdown-item" ${disabledAttr} onclick="event.stopPropagation(); sendCmd('/resume','')">&#9654; Resume</div>
+    <div class="dropdown-item danger" ${disabledAttr} onclick="event.stopPropagation(); sendCmd('/end','')">&#9632; Stop</div>
+    <div class="dropdown-separator"></div>
+    <div class="dropdown-label">Permission mode</div>
+    ${permItems}
+    <div class="dropdown-separator"></div>
+    <div class="ctx-bar-wrap">
+      <div class="ctx-bar-label">Context: ${fmtTokens(ctxUsed)} / ${fmtTokens(ctxMax)} (${pct}%)</div>
+      <div class="ctx-bar-track"><div class="ctx-bar-fill ${fillClass}" style="width:${pct}%"></div></div>
+    </div>
+  </div>
+</div>`;
+}
+
+function toggleDropdown(badge, event) {
+  event.stopPropagation();
+  const dd = badge.querySelector('.agent-dropdown');
+  const wasOpen = dd.classList.contains('open');
+  document.querySelectorAll('.agent-dropdown.open').forEach(d => d.classList.remove('open'));
+  if (!wasOpen) dd.classList.add('open');
+}
+
+function setPermission(mode) {
+  sendCmd('/permission', mode);
+  liveStatus.permission_mode = mode;
+  document.querySelectorAll('.agent-dropdown.open').forEach(d => d.classList.remove('open'));
+  updateHeaderAgents();
+}
+
+// Close dropdowns and menus on outside click
+document.addEventListener('click', (e) => {
+  document.querySelectorAll('.agent-dropdown.open').forEach(d => d.classList.remove('open'));
+  const addMenu = document.getElementById('add-agent-menu');
+  if (addMenu && !addMenu.contains(e.target)) addMenu.style.display = 'none';
+  // Close turns menu
+  document.querySelectorAll('.turns-menu').forEach(m => m.remove());
+});
+
+// ── Chat header ──────────────────────────────────────────────────────────────
+function renderChatHeader(chat) {
+  const header = document.getElementById('chat-header');
+  header.style.display = '';
+
+  const topic = chat.topic || 'Untitled';
+  const topicEl = document.getElementById('header-topic');
+  topicEl.innerHTML = esc(topic) + '<span class="topic-toggle"></span>';
+  topicEl.classList.add('collapsed');
+  updateTopicToggle();
+
+  const agents = chat.agents || {};
+  const turns  = (chat.turns || []).length;
+  const inTok  = chat.total_input_tokens  || 0;
+  const outTok = chat.total_output_tokens || 0;
+  const totTok = inTok + outTok;
+  const dur    = fmtDuration(chat.started_at, chat.ended_at);
+
+  const parts = [];
+  if (turns) parts.push(`${turns}t`);
+  if (totTok) parts.push(fmtTokens(totTok));
+  if (dur) parts.push(dur);
+  if (chat.project) parts.push(`[${chat.project}]`);
+  document.getElementById('header-stats').textContent = parts.join(' · ');
+
+  updateHeaderAgents();
+}
+
+function toggleTopic() {
+  const el = document.getElementById('header-topic');
+  el.classList.toggle('collapsed');
+  updateTopicToggle();
+}
+
+function updateTopicToggle() {
+  const el = document.getElementById('header-topic');
+  const toggle = el.querySelector('.topic-toggle');
+  if (!toggle) return;
+  const isCollapsed = el.classList.contains('collapsed');
+  toggle.textContent = isCollapsed ? '[ expand ]' : '[ collapse ]';
+}
+
+// ── updateHeaderAgents: N-agent aware ────────────────────────────────────────
+function updateHeaderAgents() {
+  const el = document.getElementById('header-agents');
+  if (!activeChatId) { el.innerHTML = ''; return; }
+
+  const isLive = liveChats.has(activeChatId);
+  const data = _chatCache[activeChatId];
+
+  let agents = data ? data.agents : null;
+  if (!agents) {
+    const chat = allChats.find(c => c.chat_id === activeChatId);
+    if (chat && chat.agents) agents = chat.agents;
+  }
+  if (!agents) { el.innerHTML = ''; return; }
+
+  const agentKeys = Object.keys(agents);
+  // Detect if we have numeric keys (N-agent) or legacy a/b keys
+  const isNAgentKeys = agentKeys.some(k => !isNaN(parseInt(k, 10)));
+
+  let html = '';
+
+  if (isNAgentKeys) {
+    // N-agent mode: simple colored badges (no heavy dropdown)
+    for (const [key, agent] of Object.entries(agents)) {
+      const idx = parseInt(key, 10);
+      const color = agent.color || AGENT_COLORS_HEX[idx % AGENT_COLORS_HEX.length];
+      // Context for this agent
+      const ctxUsed = liveStatus.context_agents[agent.name] || 0;
+      const ctxMax  = liveStatus.max_context || 200000;
+      const pct     = ctxMax > 0 ? Math.round((ctxUsed / ctxMax) * 100) : 0;
+      const fillClass = pct > 80 ? 'crit' : pct > 60 ? 'warn' : '';
+
+      const disabledAttr = isLive ? '' : 'style="opacity:0.4; pointer-events:none"';
+      const curPerm = liveStatus.permission_mode || 'bypassPermissions';
+      const permItems = PERM_MODES.map(mode => {
+        const isActive = mode === curPerm;
+        return `<div class="perm-item" ${disabledAttr} onclick="event.stopPropagation(); setPermission('${mode}')">
+          <div class="radio${isActive ? ' active' : ''}"></div>
+          <span>${esc(PERM_LABELS[mode] || mode)}</span>
+        </div>`;
+      }).join('');
+
+      html += `<div class="agent-badge" style="color:${color}; border-color:${color}33" onclick="toggleDropdown(this, event)">
+        ${esc(agent.name)} <span class="badge-arrow">&#9662;</span>
+        <div class="agent-dropdown">
+          <div class="dropdown-item" ${disabledAttr} onclick="event.stopPropagation(); sendCmd('/pause','')">&#9646;&#9646; Pause</div>
+          <div class="dropdown-item" ${disabledAttr} onclick="event.stopPropagation(); sendCmd('/resume','')">&#9654; Resume</div>
+          <div class="dropdown-item danger" ${disabledAttr} onclick="event.stopPropagation(); sendCmd('/end','')">&#9632; Stop</div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-label">Permission mode</div>
+          ${permItems}
+          <div class="dropdown-separator"></div>
+          <div class="ctx-bar-wrap">
+            <div class="ctx-bar-label">Context: ${fmtTokens(ctxUsed)} / ${fmtTokens(ctxMax)} (${pct}%)</div>
+            <div class="ctx-bar-track"><div class="ctx-bar-fill ${fillClass}" style="width:${pct}%"></div></div>
+          </div>
+        </div>
+      </div>`;
+    }
+  } else {
+    // Legacy 2-agent a/b mode
+    const ctxA = liveStatus.context_a, ctxB = liveStatus.context_b;
+    const ctxMax = liveStatus.max_context;
+
+    // For historical chats: estimate context from last turn
+    let estCtxA = ctxA, estCtxB = ctxB;
+    if (!isLive && data && data.turns && data.turns.length) {
+      const turnsA = data.turns.filter(t => agentSlot(t.speaker, agents) === 'a');
+      const turnsB = data.turns.filter(t => agentSlot(t.speaker, agents) === 'b');
+      if (turnsA.length) estCtxA = turnsA[turnsA.length - 1].input_tokens || 0;
+      if (turnsB.length) estCtxB = turnsB[turnsB.length - 1].input_tokens || 0;
+    }
+
+    const a = agents.a, b = agents.b;
+    html =
+      buildAgentBadge(a ? a.name : '?', 'a', estCtxA, ctxMax, isLive) +
+      buildAgentBadge(b ? b.name : '?', 'b', estCtxB, ctxMax, isLive);
+  }
+
+  // "+" button to add agent (live only)
+  if (isLive) {
+    html += `<button class="cmd-btn" onclick="showAddAgentDropdown(event)" title="Add agent" style="padding:0 6px;height:22px;font-size:14px;">+</button>`;
+  }
+
+  el.innerHTML = html;
+}
+
+// ── Add agent dropdown ────────────────────────────────────────────────────────
+async function showAddAgentDropdown(event) {
+  event.stopPropagation();
+  const menu = document.getElementById('add-agent-menu');
+  menu.innerHTML = '<div class="dropdown-item" style="color:var(--muted)">Loading...</div>';
+  // Position near the button
+  const btn = event.currentTarget;
+  const rect = btn.getBoundingClientRect();
+  menu.style.display = '';
+  menu.style.top  = (rect.bottom + 4) + 'px';
+  menu.style.left = rect.left + 'px';
+
+  try {
+    const r = await fetch('/api/agents');
+    const data = r.ok ? await r.json() : { agents: [] };
+    const names = Array.isArray(data) ? data : (data.agents || []);
+    menu.innerHTML = names.map(name =>
+      `<div class="dropdown-item" onclick="addAgentToChat('${esc(name)}')">${esc(name)}</div>`
+    ).join('') || '<div class="dropdown-item" style="color:var(--muted)">No agents available</div>';
+  } catch {
+    menu.innerHTML = '<div class="dropdown-item" style="color:var(--error)">Error loading agents</div>';
+  }
+}
+
+function addAgentToChat(name) {
+  document.getElementById('add-agent-menu').style.display = 'none';
+  sendCmd('/add', name);
+}
+
+// ── Messages: N-agent aware rendering ────────────────────────────────────────
+function renderMessages(chat) {
+  const agents = chat.agents || {};
+  const agentCount = Object.keys(agents).length;
+  const panelsContainer = document.getElementById('panels-container');
+  const messagesContainer = document.getElementById('messages-container');
+
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('new-chat-form').style.display = 'none';
+
+  if (agentCount >= 2) {
+    // Panel mode: one column per agent
+    messagesContainer.style.display = 'none';
+    panelsContainer.style.display = '';
+    createPanels(agents);
+
+    // Distribute turns to their agent panels
+    for (const turn of (chat.turns || [])) {
+      const speaker = turn.speaker || '';
+      if (speaker === 'moderator') {
+        // Moderator turns go to every panel
+        document.querySelectorAll('.panel-messages').forEach(pm => {
+          const wrapper = document.createElement('div');
+          wrapper.innerHTML = buildTurnHTML(turn, agents);
+          while (wrapper.firstChild) pm.appendChild(wrapper.firstChild);
+        });
+      } else {
+        const panel = document.querySelector(`.agent-panel[data-agent="${speaker}"] .panel-messages`);
+        if (panel) {
+          const wrapper = document.createElement('div');
+          wrapper.innerHTML = buildTurnHTML(turn, agents);
+          while (wrapper.firstChild) panel.appendChild(wrapper.firstChild);
+        }
+      }
+    }
+
+    // Scroll all panels to bottom
+    document.querySelectorAll('.panel-messages').forEach(pm => pm.scrollTop = pm.scrollHeight);
+  } else {
+    // Single-container fallback (0 or 1 agent)
+    panelsContainer.style.display = 'none';
+    messagesContainer.style.display = '';
+    messagesContainer.innerHTML = (chat.turns || []).map(t => buildTurnHTML(t, agents)).join('');
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+}
+
+function appendTurnToView(turn, agents) {
+  const speaker = turn.speaker || '';
+
+  if (isPanelMode()) {
+    // Panel mode: remove streaming placeholder from this speaker's panel, add final turn
+    const panel = document.querySelector(`.agent-panel[data-agent="${speaker}"] .panel-messages`);
+
+    if (speaker === 'moderator') {
+      // Moderator goes to all panels
+      document.querySelectorAll('.panel-messages').forEach(pm => {
+        // Remove any streaming placeholder for moderator (unlikely but safe)
+        const streamEl = pm.querySelector('.streaming[data-streaming-speaker="moderator"]');
+        if (streamEl) streamEl.remove();
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = buildTurnHTML(turn, agents);
+        while (wrapper.firstChild) pm.appendChild(wrapper.firstChild);
+        pm.scrollTop = pm.scrollHeight;
+      });
+    } else if (panel) {
+      const streamEl = panel.querySelector('.streaming');
+      if (streamEl) streamEl.remove();
+      const statusEl = panel.parentElement.querySelector('.panel-status');
+      if (statusEl) statusEl.textContent = 'idle';
+
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = buildTurnHTML(turn, agents);
+      while (wrapper.firstChild) panel.appendChild(wrapper.firstChild);
+      panel.scrollTop = panel.scrollHeight;
+    }
+  } else {
+    // Old single-container mode
+    const container = document.getElementById('messages-container');
+    if (!container || container.style.display === 'none') return;
+
+    // Remove streaming placeholder
+    const streamEl = document.getElementById('streaming-turn');
+    if (streamEl) streamEl.remove();
+
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = buildTurnHTML(turn, agents);
+    while (wrapper.firstChild) container.appendChild(wrapper.firstChild);
+    container.scrollTop = container.scrollHeight;
+  }
+}
+
+// ── Empty / chat view toggle ─────────────────────────────────────────────────
+function showEmptyState() {
+  document.getElementById('chat-header').style.display = 'none';
+  document.getElementById('messages-container').style.display = 'none';
+  document.getElementById('panels-container').style.display = 'none';
+  document.getElementById('new-chat-form').style.display = 'none';
+  document.getElementById('empty-state').style.display = '';
+}
+
+// ── Command bar state ────────────────────────────────────────────────────────
+function updateCmdBar() {
+  const isLive   = activeChatId ? liveChats.has(activeChatId) : false;
+  const input    = document.getElementById('cmd-input');
+  const btnSend  = document.getElementById('btn-send');
+  const btnPause  = document.getElementById('btn-pause');
+  const btnResume = document.getElementById('btn-resume');
+  const btnEnd    = document.getElementById('btn-end');
+  const btnStep   = document.getElementById('btn-step');
+  const btnMod    = document.getElementById('btn-moderator');
+  const dot      = document.getElementById('state-dot');
+  const stateText = document.getElementById('state-text');
+  const ctxEl    = document.getElementById('ctx-status');
+
+  if (!activeChatId) {
+    input.disabled    = true;
+    input.placeholder = 'Type to send or /command...';
+    btnSend.disabled  = true;
+    btnPause.disabled = true;
+    btnResume.disabled = true;
+    btnResume.style.display = 'none';
+    btnPause.style.display = '';
+    btnEnd.disabled   = true;
+    btnStep.disabled  = true;
+    btnMod.disabled   = true;
+    dot.className     = 'cmd-state-dot idle';
+    stateText.textContent = '';
+    ctxEl.textContent = '';
+    return;
+  }
+
+  if (!isLive) {
+    input.disabled    = true;
+    input.placeholder = 'Chat ended';
+    btnSend.disabled  = true;
+    btnPause.disabled = true;
+    btnResume.disabled = true;
+    btnResume.style.display = 'none';
+    btnPause.style.display = '';
+    btnEnd.disabled   = true;
+    btnStep.disabled  = true;
+    btnMod.disabled   = true;
+    dot.className     = 'cmd-state-dot ended';
+    const chatData = allChats.find(c => c.chat_id === activeChatId) || {};
+    const turns = chatData.turn_count || 0;
+    const tok   = fmtTokens(liveStatus.total_tokens || 0);
+    // Show resurrect button for ended chats
+    stateText.innerHTML = `Ended &middot; ${turns} turns${tok !== '0' ? ' &middot; ' + esc(tok) + ' tokens' : ''} &middot; <button class="cmd-btn" style="height:18px;font-size:11px;padding:0 6px;" onclick="resurrectChat()">+ Turns</button>`;
+    ctxEl.textContent = '';
+    return;
+  }
+
+  // Live chat
+  input.disabled    = false;
+  input.placeholder = 'Type to send or /command...';
+  btnSend.disabled  = false;
+  btnEnd.disabled   = !moderatorMode;
+  btnStep.disabled  = false;
+  btnMod.disabled   = false;
+  btnStep.textContent = stepMode ? 'Step' : 'Live';
+
+  const state  = liveStatus.state || 'running';
+  const isPaused = state === 'paused';
+  btnPause.style.display  = isPaused ? 'none' : '';
+  btnPause.disabled       = !moderatorMode;
+  btnResume.style.display = isPaused ? '' : 'none';
+  btnResume.disabled      = false;
+  const turn   = liveStatus.turn  || 0;
+  const maxT   = liveStatus.max_turns || 0;
+  const tok    = fmtTokens(liveStatus.total_tokens || 0);
+  const turnStr = maxT ? `${turn}/${maxT}` : String(turn);
+
+  const turnsBtn = `<button class="turns-add-btn" onclick="showTurnsMenu(event)" title="Add turns">+</button>`;
+
+  if (state === 'running') {
+    dot.className = 'cmd-state-dot running';
+    stateText.innerHTML = `Running &middot; Turn ${esc(turnStr)}${turnsBtn} &middot; ${esc(tok)} tokens`;
+  } else if (state === 'paused') {
+    dot.className = 'cmd-state-dot paused';
+    stateText.innerHTML = `Paused &middot; Turn ${esc(turnStr)}${turnsBtn} &middot; ${esc(tok)} tokens`;
+  } else if (state === 'ended') {
+    dot.className = 'cmd-state-dot ended';
+    stateText.innerHTML = `Ended &middot; ${esc(String(turn))} turns &middot; ${esc(tok)} tokens`;
+  } else if (state === 'stale') {
+    dot.className = 'cmd-state-dot stale';
+    stateText.innerHTML = `Stale &middot; ${esc(String(turn))} turns &middot; ${esc(tok)} tokens`;
+  } else {
+    dot.className = 'cmd-state-dot idle';
+    stateText.innerHTML = `${esc(state)} &middot; ${esc(tok)} tokens`;
+  }
+
+  // Context meter: show max across all agents
+  const ctxMax = liveStatus.max_context || 200000;
+  const allCtx = Object.values(liveStatus.context_agents || {});
+  const legacyMax = Math.max(liveStatus.context_a || 0, liveStatus.context_b || 0);
+  const ctxMain = allCtx.length > 0 ? Math.max(...allCtx) : legacyMax;
+  if (ctxMain > 0) {
+    ctxEl.textContent = `ctx: ${fmtTokens(ctxMain)}/${fmtTokens(ctxMax)}`;
+  } else {
+    ctxEl.textContent = '';
+  }
+}
+
+// ── Turns menu ────────────────────────────────────────────────────────────────
+function showTurnsMenu(event) {
+  event.stopPropagation();
+  // Remove existing menu
+  document.querySelectorAll('.turns-menu').forEach(m => m.remove());
+
+  const btn = event.currentTarget;
+  const menu = document.createElement('div');
+  menu.className = 'turns-menu';
+
+  const options = [
+    { label: '+5',     value: 5 },
+    { label: '+10',    value: 10 },
+    { label: '+20',    value: 20 },
+    { label: 'Custom', value: 0 },
+  ];
+
+  for (const opt of options) {
+    const item = document.createElement('div');
+    item.className = 'turns-menu-item';
+    item.textContent = opt.label;
+    item.onclick = (e) => {
+      e.stopPropagation();
+      menu.remove();
+      if (opt.value === 0) {
+        const n = parseInt(prompt('Add how many turns?', '10'), 10);
+        if (n > 0) addTurnsToChat(n);
+      } else {
+        addTurnsToChat(opt.value);
+      }
+    };
+    menu.appendChild(item);
+  }
+
+  // Position relative to cmd-status
+  const statusEl = document.getElementById('cmd-status');
+  statusEl.appendChild(menu);
+}
+
+async function addTurnsToChat(n) {
+  if (!activeChatId || !n) return;
+  try {
+    await fetch(`/api/chats/${encodeURIComponent(activeChatId)}/add-turns`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ count: n }),
+    });
+  } catch (e) {
+    console.error('addTurnsToChat error:', e);
+  }
+}
+
+async function resurrectChat() {
+  if (!activeChatId) return;
+  const n = parseInt(prompt('How many additional turns?', '10'), 10);
+  if (!n || n <= 0) return;
+  try {
+    await fetch(`/api/chats/${encodeURIComponent(activeChatId)}/resurrect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ additional_turns: n }),
+    });
+  } catch (e) {
+    console.error('resurrectChat error:', e);
+  }
+}
+
+// ── Select a chat ────────────────────────────────────────────────────────────
+async function selectChat(chatId) {
+  activeChatId = chatId;
+  renderSidebar();
+
+  // Always fetch full state from server (server is source of truth)
+  const chat = await fetchChat(chatId);
+  if (!chat) { showEmptyState(); updateCmdBar(); return; }
+
+  // Cache for SSE turn appending
+  _chatCache[chatId] = chat;
+
+  document.getElementById('new-chat-form').style.display = 'none';
+  renderChatHeader(chat);
+  renderMessages(chat);
+  updateCmdBar();
+}
+
+// ── API ──────────────────────────────────────────────────────────────────────
+async function fetchChats() {
+  try {
+    const r = await fetch('/api/chats');
+    if (!r.ok) throw new Error(r.statusText);
+    return await r.json();
+  } catch (e) {
+    console.error('fetchChats:', e);
+    return [];
+  }
+}
+
+async function fetchChat(chatId) {
+  try {
+    const r = await fetch(`/api/chats/${encodeURIComponent(chatId)}`);
+    if (!r.ok) throw new Error(r.statusText);
+    return await r.json();
+  } catch (e) {
+    console.error('fetchChat:', e);
+    return null;
+  }
+}
+
+async function loadChatList() {
+  const chats = await fetchChats();
+  allChats = chats;
+
+  liveChats.clear();
+  let activeLiveId = null;
+  for (const c of chats) {
+    if (c._live && !c.ended_at) {
+      liveChats.add(c.chat_id);
+      activeLiveId = c.chat_id;
+      liveStatus.state = c.state || 'paused';
+      liveStatus.turn = c.turn_count || 0;
+      liveStatus.total_tokens = c.total_tokens || 0;
+    }
+  }
+
+  filterChats(document.getElementById('search').value);
+
+  if (activeLiveId && !activeChatId) {
+    selectChat(activeLiveId);
+  }
+}
+
+// ── SSE connection (events from server) ──────────────────────────────────────
+function sseConnect() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+
+  const url = `${SSE_URL}?last_id=${_lastEventId}`;
+  eventSource = new EventSource(url);
+
+  eventSource.onopen = () => {
+    setWsStatus('connected');
+  };
+
+  eventSource.onerror = () => {
+    setWsStatus('disconnected');
+  };
+
+  // All event types including new N-agent events
+  const evTypes = [
+    'status', 'turn', 'chat_started', 'chat_ended', 'log_updated',
+    'stream_start', 'stream_chunk', 'msg_status',
+    // N-agent new events
+    'phase_change', 'sync_status', 'agent_joined', 'turns_extended',
+    'agent_msg', 'report_published',
+  ];
+
+  for (const evType of evTypes) {
+    eventSource.addEventListener(evType, (e) => {
+      _lastEventId = e.lastEventId || _lastEventId;
+      try {
+        const data = JSON.parse(e.data);
+        handleSSEvent(data);
+      } catch {}
+    });
+  }
+
+  eventSource.addEventListener('ping', () => {});
+}
+
+// ── WebSocket (commands only, client → server) ───────────────────────────────
+function wsConnect() {
+  if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
+  try {
+    ws = new WebSocket(WS_URL);
+  } catch (e) {
+    scheduleReconnect();
+    return;
+  }
+
+  ws.onopen = () => {
+    wsBackoff = 1000;
+    if (wsReconnTimer) { clearTimeout(wsReconnTimer); wsReconnTimer = null; }
+  };
+
+  ws.onclose = () => scheduleReconnect();
+  ws.onerror = () => {};
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'ack') { /* command acknowledged */ }
+    } catch {}
+  };
+}
+
+function scheduleReconnect() {
+  if (wsReconnTimer) return;
+  wsReconnTimer = setTimeout(() => {
+    wsReconnTimer = null;
+    wsBackoff = Math.min(wsBackoff * 2, 16000);
+    wsConnect();
+  }, wsBackoff);
+}
+
+function setWsStatus(state) {
+  const dot   = document.getElementById('ws-dot');
+  const label = document.getElementById('ws-label');
+  dot.className = '';
+  if (state === 'connected') {
+    dot.classList.add('connected', 'live-pulse');
+    label.textContent = 'live';
+  } else if (state === 'disconnected') {
+    dot.classList.add('disconnected');
+    label.textContent = 'offline';
+  } else {
+    label.textContent = 'connecting';
+  }
+}
+
+// ── SSE event handling ───────────────────────────────────────────────────────
+function handleSSEvent(msg) {
+  const type = msg.type;
+
+  if (type === 'status') {
+    Object.assign(liveStatus, {
+      state:           msg.state            || liveStatus.state,
+      turn:            msg.turn             ?? liveStatus.turn,
+      max_turns:       msg.max_turns        ?? liveStatus.max_turns,
+      total_tokens:    msg.total_tokens     ?? liveStatus.total_tokens,
+      permission_mode: msg.permission_mode  || liveStatus.permission_mode,
+    });
+    // Update per-agent context map if provided
+    if (msg.context_agents) {
+      liveStatus.context_agents = Object.assign(liveStatus.context_agents || {}, msg.context_agents);
+    }
+    // Backward compat: 2-agent context fields
+    if (msg.context_a !== undefined) liveStatus.context_a = msg.context_a;
+    if (msg.context_b !== undefined) liveStatus.context_b = msg.context_b;
+    if (msg.max_context) liveStatus.max_context = msg.max_context;
+
+    if (msg.step_mode !== undefined) stepMode = msg.step_mode;
+    if (msg.moderator_mode !== undefined) moderatorMode = msg.moderator_mode;
+    if (msg.chat_id && msg.state) {
+      const summary = allChats.find(c => c.chat_id === msg.chat_id);
+      if (summary) summary.state = msg.state;
+    }
+    updateCmdBar();
+    updateHeaderAgents();
+    renderSidebar();
+  }
+
+  else if (type === 'stream_start') {
+    const chatId = msg.chat_id;
+    if (chatId !== activeChatId) return;
+
+    const agents = _chatCache[chatId] ? _chatCache[chatId].agents : null;
+    const speaker = msg.speaker || '?';
+    const color = agentColorByName(speaker, agents);
+
+    if (isPanelMode()) {
+      // Panel mode: create streaming div inside the correct agent panel
+      const panel = document.querySelector(`.agent-panel[data-agent="${speaker}"] .panel-messages`);
+      if (panel) {
+        const div = document.createElement('div');
+        div.className = 'turn streaming';
+        div.dataset.streamingSpeaker = speaker;
+        div.innerHTML = `
+          <div class="turn-header">
+            <span class="turn-speaker" style="color:${color}">${esc(speaker)}</span>
+            <span class="turn-header-meta streaming-indicator">streaming...</span>
+          </div>
+          <div class="turn-text streaming-text"></div>`;
+        panel.appendChild(div);
+        panel.scrollTop = panel.scrollHeight;
+        const statusEl = panel.parentElement.querySelector('.panel-status');
+        if (statusEl) statusEl.textContent = 'streaming...';
+      }
+    } else {
+      // Fallback: single-container streaming placeholder
+      const container = document.getElementById('messages-container');
+      if (!container || container.style.display === 'none') return;
+      const slot = agentSlot(speaker, agents);
+      const div = document.createElement('div');
+      div.className = `turn turn-${slot} streaming`;
+      div.id = 'streaming-turn';
+      div.innerHTML = `
+        <div class="turn-header">
+          <span class="turn-speaker" style="color:${color}">${esc(speaker)}</span>
+          <span class="turn-header-meta streaming-indicator">streaming...</span>
+        </div>
+        <div class="turn-text" id="streaming-text"></div>`;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    }
+  }
+
+  else if (type === 'stream_chunk') {
+    const speaker = msg.speaker;
+
+    if (isPanelMode() && speaker) {
+      // Panel mode: append to correct panel's streaming text
+      const panel = document.querySelector(`.agent-panel[data-agent="${speaker}"] .panel-messages`);
+      if (panel) {
+        const streamEl = panel.querySelector('.streaming .streaming-text');
+        if (streamEl) {
+          streamEl.textContent += msg.chunk;
+          panel.scrollTop = panel.scrollHeight;
+        }
+        return;
+      }
+    }
+
+    // Fallback: old single-container
+    const el = document.getElementById('streaming-text');
+    if (!el) return;
+    el.textContent += msg.chunk;
+    const container = document.getElementById('messages-container');
+    if (container) {
+      const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+      if (atBottom) container.scrollTop = container.scrollHeight;
+    }
+  }
+
+  else if (type === 'msg_status') {
+    const status = msg.status;
+    const speaker = msg.speaker || '';
+
+    if (speaker === 'moderator' && status === 'delivered' && window._lastModMsgId) {
+      const dEl = document.getElementById(window._lastModMsgId + '-d');
+      if (dEl) dEl.classList.add('active');
+    }
+    if (speaker === 'moderator' && status === 'injected' && window._lastModMsgId) {
+      const dEl = document.getElementById(window._lastModMsgId + '-d');
+      if (dEl) { dEl.classList.add('active', 'injected'); }
+      const parent = dEl ? dEl.parentElement : null;
+      if (parent) {
+        const firstCheck = parent.querySelector('.check');
+        if (firstCheck) firstCheck.classList.add('injected');
+      }
+    }
+  }
+
+  else if (type === 'turn') {
+    const chatId   = msg.chat_id;
+    const turnData = msg.turn_data || msg;
+
+    // Dedup: moderator turn already rendered optimistically
+    if ((turnData.speaker || '') === 'moderator' && window._lastModMsgId) {
+      const dEl = document.getElementById(window._lastModMsgId + '-d');
+      if (dEl) dEl.classList.add('active');
+      window._lastModMsgId = null;
+      if (chatId && _chatCache[chatId]) {
+        _chatCache[chatId].turns.push(turnData);
+      }
+      const summary = allChats.find(c => c.chat_id === chatId);
+      if (summary) summary.turn_count = (summary.turn_count || 0) + 1;
+      liveStatus.turn = (liveStatus.turn || 0) + 1;
+      if (msg.total_tokens) liveStatus.total_tokens = msg.total_tokens;
+      renderSidebar(); updateCmdBar(); updateHeaderAgents();
+      return;
+    }
+
+    // Update per-agent context from turn event (backward compat + new)
+    if (msg.context_a !== undefined) liveStatus.context_a = msg.context_a;
+    if (msg.context_b !== undefined) liveStatus.context_b = msg.context_b;
+    if (msg.max_context) liveStatus.max_context = msg.max_context;
+    if (msg.permission_mode) liveStatus.permission_mode = msg.permission_mode;
+    if (msg.context_agents) {
+      liveStatus.context_agents = Object.assign(liveStatus.context_agents || {}, msg.context_agents);
+    }
+    // Also update single-agent context from turn speaker
+    if (turnData.speaker && turnData.input_tokens) {
+      liveStatus.context_agents = liveStatus.context_agents || {};
+      liveStatus.context_agents[turnData.speaker] = turnData.input_tokens;
+    }
+
+    // Update cached chat data
+    if (chatId && _chatCache[chatId]) {
+      _chatCache[chatId].turns.push(turnData);
+      _chatCache[chatId].total_input_tokens =
+        (_chatCache[chatId].total_input_tokens || 0) + (turnData.input_tokens || 0);
+      _chatCache[chatId].total_output_tokens =
+        (_chatCache[chatId].total_output_tokens || 0) + (turnData.output_tokens || 0);
+    }
+
+    const summary = allChats.find(c => c.chat_id === chatId);
+    if (summary) {
+      summary.turn_count = (summary.turn_count || 0) + 1;
+      summary.total_tokens = (summary.total_tokens || 0) +
+        (turnData.output_tokens || 0) + (turnData.input_tokens || 0);
+    }
+
+    if (chatId === activeChatId) {
+      const agents = _chatCache[chatId] ? _chatCache[chatId].agents : null;
+      appendTurnToView(turnData, agents);
+      if (_chatCache[chatId]) renderChatHeader(_chatCache[chatId]);
+    }
+
+    liveStatus.turn = (liveStatus.turn || 0) + 1;
+    if (msg.total_tokens) liveStatus.total_tokens = msg.total_tokens;
+    renderSidebar();
+    updateCmdBar();
+    updateHeaderAgents();
+  }
+
+  else if (type === 'chat_started') {
+    const chatId = msg.chat_id;
+    if (!chatId) return;
+
+    liveChats.add(chatId);
+
+    const synth = {
+      chat_id:     chatId,
+      topic:       msg.topic   || 'Live chat',
+      agents:      msg.agents  || {},
+      started_at:  msg._ts || new Date().toISOString(),
+      ended_at:    null,
+      turn_count:  0,
+      total_tokens: 0,
+      facts_count: 0,
+      _live:       true,
+    };
+    const existing = allChats.findIndex(c => c.chat_id === chatId);
+    if (existing >= 0) allChats[existing] = synth;
+    else allChats.unshift(synth);
+
+    filterChats(document.getElementById('search').value);
+    selectChat(chatId);
+
+    liveStatus = {
+      state: 'running', turn: 0,
+      max_turns: msg.max_turns || 0,
+      total_tokens: 0,
+      context_agents: {},
+      context_a: 0, context_b: 0,
+      max_context: msg.max_context || 200000,
+      permission_mode: msg.permission_mode || 'bypassPermissions',
+    };
+    updateCmdBar();
+  }
+
+  else if (type === 'chat_ended') {
+    const chatId = msg.chat_id;
+    if (!chatId) return;
+
+    liveChats.delete(chatId);
+    if (chatId === activeChatId) {
+      liveStatus.state = 'ended';
+      updateCmdBar();
+      updateHeaderAgents();
+    }
+
+    loadChatList().then(() => {
+      if (chatId === activeChatId) selectChat(chatId);
+    });
+  }
+
+  else if (type === 'log_updated') {
+    loadChatList().then(() => {
+      if (msg.chat_id && msg.chat_id === activeChatId && !liveChats.has(activeChatId)) {
+        selectChat(activeChatId);
+      }
+    });
+  }
+
+  // ── New N-agent SSE events ────────────────────────────────────────────────
+
+  else if (type === 'phase_change') {
+    const bar = document.getElementById('sync-bar');
+    const label = document.getElementById('phase-label');
+    if (bar && label) {
+      label.textContent = (msg.phase || 'unknown').toUpperCase();
+      bar.style.display = '';
+    }
+  }
+
+  else if (type === 'sync_status') {
+    const el = document.getElementById('sync-status');
+    if (el) el.textContent = `${msg.count}/${msg.total} synced`;
+  }
+
+  else if (type === 'agent_joined') {
+    // Dynamically add a new panel for the joined agent
+    const agents = _chatCache[activeChatId] ? (_chatCache[activeChatId].agents || {}) : {};
+    const nextKey = String(Object.keys(agents).length);
+    agents[nextKey] = { name: msg.agent_name };
+    if (_chatCache[activeChatId]) _chatCache[activeChatId].agents = agents;
+
+    const container = document.getElementById('panels-container');
+    if (container && container.style.display !== 'none') {
+      const idx = parseInt(nextKey, 10);
+      const color = AGENT_COLORS_HEX[idx % AGENT_COLORS_HEX.length];
+      const panel = document.createElement('div');
+      panel.className = 'agent-panel';
+      panel.dataset.agent = msg.agent_name;
+      panel.innerHTML = `
+        <div class="panel-header">
+          <span class="panel-agent-name" style="color:${color}">${esc(msg.agent_name)}</span>
+          <span class="panel-status">joined</span>
+        </div>
+        <div class="panel-messages"></div>`;
+      container.appendChild(panel);
+    }
+    updateHeaderAgents();
+  }
+
+  else if (type === 'turns_extended') {
+    liveStatus.max_turns = msg.new_max || liveStatus.max_turns;
+    updateCmdBar();
+  }
+
+  else if (type === 'agent_msg') {
+    // Show inter-agent message as a notification in the sender's panel
+    const panel = document.querySelector(`.agent-panel[data-agent="${msg.from}"] .panel-messages`);
+    if (panel) {
+      const div = document.createElement('div');
+      div.className = 'agent-msg-notification';
+      div.innerHTML = `<span style="color:var(--muted)">→ @${esc(msg.to)}: ${esc(msg.text || '')}</span>`;
+      panel.appendChild(div);
+      panel.scrollTop = panel.scrollHeight;
+    }
+  }
+
+  else if (type === 'report_published') {
+    // Show report card in the agent's panel
+    const panel = document.querySelector(`.agent-panel[data-agent="${msg.agent}"] .panel-messages`);
+    if (panel) {
+      const div = document.createElement('div');
+      div.className = 'report-card';
+      div.innerHTML = `
+        <div class="report-title">${esc(msg.title || 'Report')}</div>
+        <div class="report-preview">${esc(msg.preview || '')}</div>
+        <div class="report-link" onclick="window.open('http://localhost:8888','_blank')">View in Exchange</div>`;
+      panel.appendChild(div);
+      panel.scrollTop = panel.scrollHeight;
+    }
+  }
+}
+
+// ── Mode toggles ─────────────────────────────────────────────────────────────
+function toggleStepMode() {
+  stepMode = !stepMode;
+  const btn = document.getElementById('btn-step');
+  btn.textContent = stepMode ? 'Step' : 'Live';
+  btn.title = stepMode ? 'Step mode (pause after each turn)' : 'Live mode (auto-continue)';
+  sendCmd(stepMode ? '/step' : '/live', '');
+}
+
+function toggleModeratorMode() {
+  moderatorMode = !moderatorMode;
+  const btn = document.getElementById('btn-moderator');
+  btn.style.opacity = moderatorMode ? '1' : '0.5';
+  btn.title = moderatorMode ? 'Moderator ON (you control)' : 'Moderator OFF (orchestrator controls)';
+  sendCmd('/moderator', moderatorMode ? 'on' : 'off');
+  updateCmdBar();
+}
+
+// ── Commands ─────────────────────────────────────────────────────────────────
+function sendCmd(cmd, arg) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.warn('WS not connected, cannot send command');
+    return;
+  }
+  ws.send(JSON.stringify({ type: 'command', cmd, arg }));
+}
+
+function sendCmdInput() {
+  const input = document.getElementById('cmd-input');
+  const raw   = input.value.trim();
+  if (!raw) return;
+
+  let cmd, arg;
+  if (raw.startsWith('/')) {
+    const sp = raw.indexOf(' ');
+    if (sp === -1) { cmd = raw; arg = ''; }
+    else { cmd = raw.slice(0, sp); arg = raw.slice(sp + 1).trim(); }
+  } else {
+    cmd = '/say';
+    arg = raw;
+  }
+
+  sendCmd(cmd, arg);
+  input.value = '';
+
+  // Show sent message locally using same buildTurnHTML as server
+  if (cmd === '/say' && arg && activeChatId) {
+    const synthTurn = { turn: 0, speaker: 'moderator', text: arg, timestamp: new Date().toISOString() };
+    const agents = _chatCache[activeChatId] ? _chatCache[activeChatId].agents : null;
+
+    if (isPanelMode()) {
+      // Show moderator message in all panels
+      document.querySelectorAll('.panel-messages').forEach(pm => {
+        const msgId = 'mod-msg-' + Date.now();
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = buildTurnHTML(synthTurn, agents);
+        const modText = wrapper.querySelector('.turn-mod-text');
+        if (modText) modText.id = msgId;
+        const statusEl = wrapper.querySelector('.msg-status');
+        if (statusEl) {
+          const checks = statusEl.querySelectorAll('.check');
+          if (checks[1]) { checks[1].classList.remove('active'); checks[1].id = msgId + '-d'; }
+        }
+        while (wrapper.firstChild) pm.appendChild(wrapper.firstChild);
+        pm.scrollTop = pm.scrollHeight;
+        window._lastModMsgId = msgId;
+      });
+    } else {
+      const msgArea = document.getElementById('messages-container');
+      if (msgArea) {
+        const msgId = 'mod-msg-' + Date.now();
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = buildTurnHTML(synthTurn, agents);
+        const modText = wrapper.querySelector('.turn-mod-text');
+        if (modText) modText.id = msgId;
+        const statusEl = wrapper.querySelector('.msg-status');
+        if (statusEl) {
+          const checks = statusEl.querySelectorAll('.check');
+          if (checks[1]) { checks[1].classList.remove('active'); checks[1].id = msgId + '-d'; }
+        }
+        while (wrapper.firstChild) msgArea.appendChild(wrapper.firstChild);
+        msgArea.scrollTop = msgArea.scrollHeight;
+        window._lastModMsgId = msgId;
+      }
+    }
+
+    if (liveStatus.state === 'paused') {
+      const st = document.getElementById('state-text');
+      if (st && !st.textContent.includes('queued')) st.innerHTML += ' &middot; message queued';
+    }
+  }
+}
+
+function endChat() {
+  if (!activeChatId) return;
+  sendCmd('/end', '');
+  const chatId = activeChatId;
+  setTimeout(async () => {
+    if (liveChats.has(chatId)) {
+      try {
+        await fetch(`/api/chats/${encodeURIComponent(chatId)}/end`, { method: 'POST' });
+      } catch (e) { console.error('Force-end failed:', e); }
+    }
+  }, 5000);
+}
+
+function onCmdKey(event) {
+  if (event.key === 'Enter') sendCmdInput();
+}
+
+// ── Resizable sidebar ────────────────────────────────────────────────────────
+function initResize() {
+  const handle  = document.getElementById('resize-handle');
+  const sidebar = document.getElementById('sidebar');
+  let dragging  = false;
+  let startX    = 0;
+  let startW    = 0;
+
+  const saved = localStorage.getItem('chat_sidebar_w');
+  if (saved) {
+    const w = parseInt(saved, 10);
+    if (w >= 160 && w <= 500) sidebar.style.width = w + 'px';
+  }
+
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    dragging = true;
+    startX = e.clientX;
+    startW = sidebar.offsetWidth;
+    handle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;
+    let newW = startW + dx;
+    newW = Math.max(160, Math.min(500, newW));
+    sidebar.style.width = newW + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    localStorage.setItem('chat_sidebar_w', String(sidebar.offsetWidth));
+  });
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  initResize();
+  updateCmdBar();
+  await loadChatList();
+  sseConnect();
+  wsConnect();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
