@@ -8,11 +8,11 @@
     "registered_at": "2026-03-08T00:00:00Z"
   },
   {
-    "name": "testclone",
-    "workspace": "/Users/eliahkadu/Desktop/_test_clone_",
-    "role": "test clone agent",
+    "name": "zeltdrin",
+    "workspace": "/Users/eliahkadu/Desktop/_clone_test_",
+    "role": "clone of falkvelt",
     "default_budget": 5.0,
     "permission_mode": "bypassPermissions",
-    "registered_at": "2026-03-08T20:51:01.021405+00:00"
+    "registered_at": "2026-03-09T00:00:00Z"
   }
 ]

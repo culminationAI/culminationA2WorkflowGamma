@@ -664,7 +664,6 @@ body {
 .cmd-state-dot.running  { background: var(--success); animation: dot-pulse 1.4s ease-in-out infinite; }
 .cmd-state-dot.paused   { background: #dcdcaa; }
 .cmd-state-dot.ended    { background: var(--muted); }
-.cmd-state-dot.stale    { background: #e8a317; }
 .cmd-state-dot.idle     { background: transparent; border: 1px solid var(--muted); }
 
 /* ── Delivery markers ── */
@@ -673,13 +672,6 @@ body {
 .msg-status .check.active { opacity: 1; }
 .msg-status .check.injected { color: #4ec9b0; opacity: 1; }
 
-/* Stale dot in sidebar */
-.chat-stale-dot {
-  width: 6px;
-  height: 6px;
-  background: #e8a317;
-  flex-shrink: 0;
-}
 
 #cmd-controls {
   display: flex;
@@ -689,8 +681,10 @@ body {
 
 #cmd-input {
   flex: 1;
+  min-height: 26px;
   height: 26px;
-  padding: 0 8px;
+  max-height: 120px;
+  padding: 4px 8px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 0;
@@ -698,6 +692,10 @@ body {
   font-size: 12px;
   font-family: var(--font);
   outline: none;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.4;
+  box-sizing: border-box;
 }
 #cmd-input:focus { border-color: var(--accent); }
 #cmd-input::placeholder { color: var(--muted); }
@@ -782,15 +780,12 @@ body {
 .nc-agent-tag .nc-remove { cursor: pointer; color: var(--error); font-size: 14px; }
 
 /* ── Turns dropdown ── */
+/* position/top/left/z-index are set by JS (fixed, body-appended) */
 .turns-menu {
-  position: absolute;
   background: var(--surface);
   border: 1px solid var(--border);
   padding: 4px 0;
-  z-index: 200;
   min-width: 80px;
-  bottom: 20px;
-  left: 0;
 }
 .turns-menu-item {
   padding: 4px 12px;
@@ -852,6 +847,28 @@ body {
   min-width: 140px;
 }
 #add-agent-menu .dropdown-item { font-size: 12px; }
+
+/* ── Per-panel input ── */
+.panel-input-wrap {
+  border-top: 1px solid var(--border);
+  padding: 4px;
+  flex-shrink: 0;
+}
+.panel-input {
+  width: 100%;
+  height: 24px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 11px;
+  font-family: var(--font);
+  padding: 0 6px;
+  outline: none;
+  box-sizing: border-box;
+}
+.panel-input:focus {
+  border-color: var(--accent);
+}
 </style>
 </head>
 <body>
@@ -902,24 +919,7 @@ body {
       <div id="empty-state">Select a chat from the sidebar</div>
       <div id="messages-container" style="display:none;"></div>
       <div id="panels-container" style="display:none;"></div>
-      <div id="new-chat-form" style="display:none;">
-        <h3>New Chat</h3>
-        <label>Topic</label>
-        <input id="nc-topic" type="text" placeholder="What should agents discuss?">
-        <label>Agents</label>
-        <div id="nc-agents-list"></div>
-        <select id="nc-agent-select" onchange="addAgentToNewChat(this.value)">
-          <option value="">+ Add agent...</option>
-        </select>
-        <div class="nc-settings">
-          <label>Max turns: <input id="nc-max-turns" type="number" value="20" min="1" max="100"></label>
-          <label>Budget: $<input id="nc-budget" type="number" value="5.0" min="0.1" step="0.1"></label>
-        </div>
-        <div class="nc-actions">
-          <button class="cmd-btn" onclick="hideNewChatForm()">Cancel</button>
-          <button class="cmd-btn primary" onclick="createNewChat()">Start Chat</button>
-        </div>
-      </div>
+      <!-- new-chat-form removed: creation via quick prompt, settings adjusted from within chat -->
     </div>
 
     <!-- Sync bar: shown when parallel phase info is available -->
@@ -936,10 +936,11 @@ body {
         <span id="ctx-status"></span>
       </div>
       <div id="cmd-controls">
-        <input id="cmd-input" type="text"
-               placeholder="Type to send or /command..."
-               disabled
-               onkeydown="onCmdKey(event)">
+        <textarea id="cmd-input" rows="1"
+                  placeholder="Type to send or /command..."
+                  disabled
+                  onkeydown="onCmdKey(event)"
+                  oninput="autoResizeInput(this)"></textarea>
         <button class="cmd-btn primary" id="btn-send" onclick="sendCmdInput()" disabled>Send</button>
         <button class="cmd-btn" id="btn-pause" onclick="sendCmd('/pause','')" disabled title="Pause">&#9646;&#9646;</button>
         <button class="cmd-btn primary" id="btn-resume" onclick="sendCmd('/resume','')" disabled title="Start agents" style="display:none">&#9654; Start</button>
@@ -981,14 +982,23 @@ let allChats      = [];
 let filteredChats = [];
 let activeChatId  = null;
 let liveChats     = new Set();
-let liveStatus    = {
+
+// Per-chat liveStatus map: each chat has its own state object
+const _defaultLS = () => ({
   state: 'idle', turn: 0, max_turns: 0, total_tokens: 0,
-  // per-agent context map: { agentName: tokens }
   context_agents: {},
-  // backward-compat for 2-agent chats
   context_a: 0, context_b: 0, max_context: 200000,
   permission_mode: 'bypassPermissions',
-};
+});
+const _lsMap = {};
+function getLs(id) {
+  const cid = id || activeChatId;
+  if (!cid) return _defaultLS();
+  if (!_lsMap[cid]) _lsMap[cid] = _defaultLS();
+  return _lsMap[cid];
+}
+// Global liveStatus always points to the active chat's state object
+let liveStatus = _defaultLS();
 
 // Cached chat data (populated by fetchChat, updated by SSE events)
 const _chatCache = {};
@@ -1208,15 +1218,32 @@ function createPanels(agents) {
     const color = agent.color || AGENT_COLORS_HEX[idx % AGENT_COLORS_HEX.length];
     const panel = document.createElement('div');
     panel.className = 'agent-panel';
-    panel.dataset.agent = agent.name;
+    // Use numeric index as the stable key; store agent name separately for lookups
+    panel.dataset.agent = String(idx);
+    panel.dataset.agentName = agent.name;
     panel.innerHTML = `
       <div class="panel-header">
         <span class="panel-agent-name" style="color:${color}">${esc(agent.name)}</span>
         <span class="panel-status">idle</span>
       </div>
-      <div class="panel-messages"></div>`;
+      <div class="panel-messages"></div>
+      <div class="panel-input-wrap">
+        <input class="panel-input" type="text" placeholder="\u2192 ${esc(agent.name)}..."
+               onkeydown="if(event.key==='Enter'){sendToAgent('${esc(agent.name)}',this.value);this.value='';event.preventDefault();}">
+      </div>`;
     container.appendChild(panel);
   });
+}
+
+// ── Panel lookup helper (by agent name, not index key) ────────────────────────
+function findPanel(speaker, suffix) {
+  return document.querySelector(`.agent-panel[data-agent-name="${CSS.escape(speaker)}"]${suffix || ''}`);
+}
+
+// ── Send message directly to a specific agent ─────────────────────────────────
+function sendToAgent(agentName, text) {
+  if (!text.trim()) return;
+  sendCmd('/say', '@' + agentName + ' ' + text.trim());
 }
 
 // ── Sidebar rendering ────────────────────────────────────────────────────────
@@ -1236,12 +1263,8 @@ function renderSidebar() {
     const topic    = (chat.topic || 'Untitled').split('\n')[0];
     const chatId   = chat.chat_id;
 
-    const isStale = isLive && (chat.state === 'stale');
-    const liveIndicator = isStale
-      ? '<div class="chat-stale-dot" title="Stale — orchestrator not responding"></div>'
-      : (isLive ? '<div class="chat-live-dot"></div>' : '');
+    const liveIndicator = isLive ? '<div class="chat-live-dot"></div>' : '';
     const metaParts = [];
-    if (isStale) metaParts.push('Stale');
     if (turns) metaParts.push(`${turns}t`);
     if (tokens) metaParts.push(fmtTokens(tokens));
     if (timeStr) metaParts.push(timeStr);
@@ -1287,84 +1310,16 @@ async function deleteChat(chatId) {
   }
 }
 
-// ── New chat form ─────────────────────────────────────────────────────────────
+// ── Quick chat creation (prompt-based, no form) ──────────────────────────────
 async function showNewChatForm() {
-  _ncAgents = [];
-  document.getElementById('nc-topic').value = '';
-  document.getElementById('nc-agents-list').innerHTML = '';
-  document.getElementById('nc-agent-select').innerHTML = '<option value="">+ Add agent...</option>';
-  document.getElementById('nc-max-turns').value = '20';
-  document.getElementById('nc-budget').value = '5.0';
-
-  // Fetch available agents from registry
-  try {
-    const r = await fetch('/api/agents');
-    if (r.ok) {
-      const agents = await r.json();
-      const sel = document.getElementById('nc-agent-select');
-      for (const name of (Array.isArray(agents) ? agents : (agents.agents || []))) {
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        sel.appendChild(opt);
-      }
-    }
-  } catch (e) {
-    console.warn('Could not fetch agent list:', e);
-  }
-
-  // Show form, hide other areas
-  document.getElementById('empty-state').style.display = 'none';
-  document.getElementById('messages-container').style.display = 'none';
-  document.getElementById('panels-container').style.display = 'none';
-  document.getElementById('chat-header').style.display = 'none';
-  document.getElementById('new-chat-form').style.display = '';
-}
-
-function hideNewChatForm() {
-  document.getElementById('new-chat-form').style.display = 'none';
-  if (activeChatId) {
-    const chat = _chatCache[activeChatId];
-    if (chat) {
-      renderChatHeader(chat);
-      renderMessages(chat);
-    }
-  } else {
-    showEmptyState();
-  }
-}
-
-function addAgentToNewChat(name) {
-  if (!name || _ncAgents.includes(name)) return;
-  _ncAgents.push(name);
-  const container = document.getElementById('nc-agents-list');
-  const tag = document.createElement('span');
-  tag.className = 'nc-agent-tag';
-  tag.dataset.agent = name;
-  tag.innerHTML = `${esc(name)} <span class="nc-remove" onclick="removeAgentFromNewChat('${esc(name)}')">×</span>`;
-  container.appendChild(tag);
-  // Reset select
-  document.getElementById('nc-agent-select').value = '';
-}
-
-function removeAgentFromNewChat(name) {
-  _ncAgents = _ncAgents.filter(a => a !== name);
-  const tag = document.querySelector(`#nc-agents-list [data-agent="${name}"]`);
-  if (tag) tag.remove();
-}
-
-async function createNewChat() {
-  const topic = document.getElementById('nc-topic').value.trim();
-  if (!topic) { alert('Topic is required.'); return; }
-  if (_ncAgents.length < 1) { alert('Add at least one agent.'); return; }
-  const maxTurns = parseInt(document.getElementById('nc-max-turns').value, 10) || 20;
-  const budget   = parseFloat(document.getElementById('nc-budget').value) || 5.0;
+  const topic = prompt('Chat topic:');
+  if (!topic || !topic.trim()) return;
 
   try {
     const r = await fetch('/api/chats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic, agents: _ncAgents, max_turns: maxTurns, budget }),
+      body: JSON.stringify({ topic: topic.trim(), agents: [], max_turns: 5, budget: 5.0 }),
     });
     if (!r.ok) {
       const err = await r.text();
@@ -1372,7 +1327,6 @@ async function createNewChat() {
       return;
     }
     const data = await r.json();
-    hideNewChatForm();
     await loadChatList();
     if (data.chat_id) selectChat(data.chat_id);
   } catch (e) {
@@ -1387,22 +1341,20 @@ function buildAgentBadge(name, slot, ctxUsed, ctxMax, isLive) {
   const pct = ctxMax > 0 ? Math.round((ctxUsed / ctxMax) * 100) : 0;
   const fillClass = pct > 80 ? 'crit' : pct > 60 ? 'warn' : '';
   const curPerm = liveStatus.permission_mode || 'bypassPermissions';
-  const disabledAttr = isLive ? '' : 'style="opacity:0.4; pointer-events:none"';
+  const hasSubprocess = isLive && (liveStatus.state || '') !== 'waiting';
 
   const permItems = PERM_MODES.map(mode => {
     const isActive = mode === curPerm;
-    return `<div class="perm-item" ${disabledAttr} onclick="event.stopPropagation(); setPermission('${mode}')">
+    return `<div class="perm-item" onclick="event.stopPropagation(); setPermission('${mode}')">
       <div class="radio${isActive ? ' active' : ''}"></div>
       <span>${esc(PERM_LABELS[mode] || mode)}</span>
     </div>`;
   }).join('');
 
-  return `<div class="agent-badge" style="color:${color}; border-color:${color}33" onclick="toggleDropdown(this, event)">
-  ${esc(name)} <span class="badge-arrow">&#9662;</span>
-  <div class="agent-dropdown">
-    <div class="dropdown-item" ${disabledAttr} onclick="event.stopPropagation(); sendCmd('/pause','')">&#9646;&#9646; Pause</div>
-    <div class="dropdown-item" ${disabledAttr} onclick="event.stopPropagation(); sendCmd('/resume','')">&#9654; Resume</div>
-    <div class="dropdown-item danger" ${disabledAttr} onclick="event.stopPropagation(); sendCmd('/end','')">&#9632; Stop</div>
+  const subprocessItems = hasSubprocess ? `
+    <div class="dropdown-item" onclick="event.stopPropagation(); sendCmd('/pause','')">&#9646;&#9646; Pause</div>
+    <div class="dropdown-item" onclick="event.stopPropagation(); sendCmd('/resume','')">&#9654; Resume</div>
+    <div class="dropdown-item danger" onclick="event.stopPropagation(); sendCmd('/end','')">&#9632; Stop</div>
     <div class="dropdown-separator"></div>
     <div class="dropdown-label">Permission mode</div>
     ${permItems}
@@ -1410,7 +1362,13 @@ function buildAgentBadge(name, slot, ctxUsed, ctxMax, isLive) {
     <div class="ctx-bar-wrap">
       <div class="ctx-bar-label">Context: ${fmtTokens(ctxUsed)} / ${fmtTokens(ctxMax)} (${pct}%)</div>
       <div class="ctx-bar-track"><div class="ctx-bar-fill ${fillClass}" style="width:${pct}%"></div></div>
-    </div>
+    </div>` : '';
+
+  return `<div class="agent-badge" style="color:${color}; border-color:${color}33" onclick="toggleDropdown(this, event)">
+  ${esc(name)} <span class="badge-arrow">&#9662;</span>
+  <div class="agent-dropdown">
+    ${subprocessItems}
+    <div class="dropdown-item danger" onclick="event.stopPropagation(); removeAgentFromChat('${esc(name)}')">&#10005; Remove</div>
   </div>
 </div>`;
 }
@@ -1497,6 +1455,15 @@ function updateHeaderAgents() {
   if (!agents) { el.innerHTML = ''; return; }
 
   const agentKeys = Object.keys(agents);
+
+  // Empty chat — no badges, only "+" button
+  if (agentKeys.length === 0) {
+    el.innerHTML = isLive
+      ? '<button class="cmd-btn" onclick="showAddAgentDropdown(event)" title="Add agent" style="padding:0 6px;height:22px;font-size:14px;">+</button>'
+      : '';
+    return;
+  }
+
   // Detect if we have numeric keys (N-agent) or legacy a/b keys
   const isNAgentKeys = agentKeys.some(k => !isNaN(parseInt(k, 10)));
 
@@ -1504,6 +1471,9 @@ function updateHeaderAgents() {
 
   if (isNAgentKeys) {
     // N-agent mode: simple colored badges (no heavy dropdown)
+    const chatState = liveStatus.state || '';
+    const hasSubprocess = isLive && chatState !== 'waiting';
+
     for (const [key, agent] of Object.entries(agents)) {
       const idx = parseInt(key, 10);
       const color = agent.color || AGENT_COLORS_HEX[idx % AGENT_COLORS_HEX.length];
@@ -1513,22 +1483,19 @@ function updateHeaderAgents() {
       const pct     = ctxMax > 0 ? Math.round((ctxUsed / ctxMax) * 100) : 0;
       const fillClass = pct > 80 ? 'crit' : pct > 60 ? 'warn' : '';
 
-      const disabledAttr = isLive ? '' : 'style="opacity:0.4; pointer-events:none"';
       const curPerm = liveStatus.permission_mode || 'bypassPermissions';
       const permItems = PERM_MODES.map(mode => {
         const isActive = mode === curPerm;
-        return `<div class="perm-item" ${disabledAttr} onclick="event.stopPropagation(); setPermission('${mode}')">
+        return `<div class="perm-item" onclick="event.stopPropagation(); setPermission('${mode}')">
           <div class="radio${isActive ? ' active' : ''}"></div>
           <span>${esc(PERM_LABELS[mode] || mode)}</span>
         </div>`;
       }).join('');
 
-      html += `<div class="agent-badge" style="color:${color}; border-color:${color}33" onclick="toggleDropdown(this, event)">
-        ${esc(agent.name)} <span class="badge-arrow">&#9662;</span>
-        <div class="agent-dropdown">
-          <div class="dropdown-item" ${disabledAttr} onclick="event.stopPropagation(); sendCmd('/pause','')">&#9646;&#9646; Pause</div>
-          <div class="dropdown-item" ${disabledAttr} onclick="event.stopPropagation(); sendCmd('/resume','')">&#9654; Resume</div>
-          <div class="dropdown-item danger" ${disabledAttr} onclick="event.stopPropagation(); sendCmd('/end','')">&#9632; Stop</div>
+      const subprocessItems = hasSubprocess ? `
+          <div class="dropdown-item" onclick="event.stopPropagation(); sendCmd('/pause','')">&#9646;&#9646; Pause</div>
+          <div class="dropdown-item" onclick="event.stopPropagation(); sendCmd('/resume','')">&#9654; Resume</div>
+          <div class="dropdown-item danger" onclick="event.stopPropagation(); sendCmd('/end','')">&#9632; Stop</div>
           <div class="dropdown-separator"></div>
           <div class="dropdown-label">Permission mode</div>
           ${permItems}
@@ -1536,11 +1503,17 @@ function updateHeaderAgents() {
           <div class="ctx-bar-wrap">
             <div class="ctx-bar-label">Context: ${fmtTokens(ctxUsed)} / ${fmtTokens(ctxMax)} (${pct}%)</div>
             <div class="ctx-bar-track"><div class="ctx-bar-fill ${fillClass}" style="width:${pct}%"></div></div>
-          </div>
+          </div>` : '';
+
+      html += `<div class="agent-badge" style="color:${color}; border-color:${color}33" onclick="toggleDropdown(this, event)">
+        ${esc(agent.name)} <span class="badge-arrow">&#9662;</span>
+        <div class="agent-dropdown">
+          ${subprocessItems}
+          <div class="dropdown-item danger" onclick="event.stopPropagation(); removeAgentFromChat('${esc(agent.name)}')">&#10005; Remove</div>
         </div>
       </div>`;
     }
-  } else {
+  } else if (agentKeys.length > 0) {
     // Legacy 2-agent a/b mode
     const ctxA = liveStatus.context_a, ctxB = liveStatus.context_b;
     const ctxMax = liveStatus.max_context;
@@ -1555,12 +1528,11 @@ function updateHeaderAgents() {
     }
 
     const a = agents.a, b = agents.b;
-    html =
-      buildAgentBadge(a ? a.name : '?', 'a', estCtxA, ctxMax, isLive) +
-      buildAgentBadge(b ? b.name : '?', 'b', estCtxB, ctxMax, isLive);
+    if (a) html += buildAgentBadge(a.name, 'a', estCtxA, ctxMax, isLive);
+    if (b) html += buildAgentBadge(b.name, 'b', estCtxB, ctxMax, isLive);
   }
 
-  // "+" button to add agent (live only)
+  // "+" button to add agent (live chats only)
   if (isLive) {
     html += `<button class="cmd-btn" onclick="showAddAgentDropdown(event)" title="Add agent" style="padding:0 6px;height:22px;font-size:14px;">+</button>`;
   }
@@ -1584,17 +1556,41 @@ async function showAddAgentDropdown(event) {
     const r = await fetch('/api/agents');
     const data = r.ok ? await r.json() : { agents: [] };
     const names = Array.isArray(data) ? data : (data.agents || []);
-    menu.innerHTML = names.map(name =>
-      `<div class="dropdown-item" onclick="addAgentToChat('${esc(name)}')">${esc(name)}</div>`
-    ).join('') || '<div class="dropdown-item" style="color:var(--muted)">No agents available</div>';
+    menu.innerHTML = names.map(agent => {
+      const n = typeof agent === 'string' ? agent : agent.name;
+      return `<div class="dropdown-item" onclick="addAgentToChat('${esc(n)}')">${esc(n)}</div>`;
+    }).join('') || '<div class="dropdown-item" style="color:var(--muted)">No agents available</div>';
   } catch {
     menu.innerHTML = '<div class="dropdown-item" style="color:var(--error)">Error loading agents</div>';
   }
 }
 
-function addAgentToChat(name) {
+async function addAgentToChat(name) {
   document.getElementById('add-agent-menu').style.display = 'none';
-  sendCmd('/add', name);
+  if (!activeChatId) return;
+  try {
+    const r = await fetch(`/api/chats/${encodeURIComponent(activeChatId)}/add-agent`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name }),
+    });
+    if (!r.ok) { console.error('add-agent failed:', await r.text()); return; }
+    await loadChatList();
+    selectChat(activeChatId);
+  } catch (e) { console.error('addAgentToChat:', e); }
+}
+
+async function removeAgentFromChat(name) {
+  if (!activeChatId || !confirm('Remove ' + name + '?')) return;
+  try {
+    const r = await fetch(
+      '/api/chats/' + encodeURIComponent(activeChatId) + '/agents/' + encodeURIComponent(name),
+      { method: 'DELETE' }
+    );
+    if (!r.ok) { alert((await r.json().catch(function(){return {};}).error || 'Failed to remove agent')); return; }
+    await loadChatList();
+    selectChat(activeChatId);
+  } catch (e) { console.error('removeAgent:', e); }
 }
 
 // ── Messages: N-agent aware rendering ────────────────────────────────────────
@@ -1605,7 +1601,7 @@ function renderMessages(chat) {
   const messagesContainer = document.getElementById('messages-container');
 
   document.getElementById('empty-state').style.display = 'none';
-  document.getElementById('new-chat-form').style.display = 'none';
+  // (new-chat-form removed — creation is prompt-based now)
 
   if (agentCount >= 2) {
     // Panel mode: one column per agent
@@ -1624,7 +1620,7 @@ function renderMessages(chat) {
           while (wrapper.firstChild) pm.appendChild(wrapper.firstChild);
         });
       } else {
-        const panel = document.querySelector(`.agent-panel[data-agent="${speaker}"] .panel-messages`);
+        const panel = findPanel(speaker, ' .panel-messages');
         if (panel) {
           const wrapper = document.createElement('div');
           wrapper.innerHTML = buildTurnHTML(turn, agents);
@@ -1649,7 +1645,7 @@ function appendTurnToView(turn, agents) {
 
   if (isPanelMode()) {
     // Panel mode: remove streaming placeholder from this speaker's panel, add final turn
-    const panel = document.querySelector(`.agent-panel[data-agent="${speaker}"] .panel-messages`);
+    const panel = findPanel(speaker, ' .panel-messages');
 
     if (speaker === 'moderator') {
       // Moderator goes to all panels
@@ -1694,7 +1690,7 @@ function showEmptyState() {
   document.getElementById('chat-header').style.display = 'none';
   document.getElementById('messages-container').style.display = 'none';
   document.getElementById('panels-container').style.display = 'none';
-  document.getElementById('new-chat-form').style.display = 'none';
+  // (new-chat-form removed — creation is prompt-based now)
   document.getElementById('empty-state').style.display = '';
 }
 
@@ -1766,7 +1762,8 @@ function updateCmdBar() {
   btnResume.style.display = isPaused ? '' : 'none';
   btnResume.disabled      = false;
   const turn   = liveStatus.turn  || 0;
-  const maxT   = liveStatus.max_turns || 0;
+  const chatData = _chatCache[activeChatId] || {};
+  const maxT   = liveStatus.max_turns || chatData.max_turns || 0;
   const tok    = fmtTokens(liveStatus.total_tokens || 0);
   const turnStr = maxT ? `${turn}/${maxT}` : String(turn);
 
@@ -1781,9 +1778,24 @@ function updateCmdBar() {
   } else if (state === 'ended') {
     dot.className = 'cmd-state-dot ended';
     stateText.innerHTML = `Ended &middot; ${esc(String(turn))} turns &middot; ${esc(tok)} tokens`;
-  } else if (state === 'stale') {
-    dot.className = 'cmd-state-dot stale';
-    stateText.innerHTML = `Stale &middot; ${esc(String(turn))} turns &middot; ${esc(tok)} tokens`;
+  } else if (state === 'waiting') {
+    dot.className = 'cmd-state-dot idle';
+    btnPause.style.display = 'none';
+    btnEnd.disabled = true;
+    btnStep.disabled = true;
+    btnMod.disabled = true;
+    const hasAgents = Object.keys((_chatCache[activeChatId] || {}).agents || {}).length > 0;
+    if (hasAgents) {
+      btnResume.style.display = '';
+      btnResume.disabled = false;
+      input.disabled = false;
+      stateText.innerHTML = `Ready &middot; ${esc(turnStr)}${turnsBtn} — press Start`;
+    } else {
+      btnResume.style.display = 'none';
+      input.disabled = true;
+      input.placeholder = 'Add agents to begin';
+      stateText.innerHTML = `Waiting for agents &middot; ${esc(turnStr)}${turnsBtn}`;
+    }
   } else {
     dot.className = 'cmd-state-dot idle';
     stateText.innerHTML = `${esc(state)} &middot; ${esc(tok)} tokens`;
@@ -1804,10 +1816,12 @@ function updateCmdBar() {
 // ── Turns menu ────────────────────────────────────────────────────────────────
 function showTurnsMenu(event) {
   event.stopPropagation();
-  // Remove existing menu
-  document.querySelectorAll('.turns-menu').forEach(m => m.remove());
+  // Toggle: if menu already open, close it and return
+  const existing = document.querySelector('.turns-menu');
+  if (existing) { existing.remove(); return; }
 
   const btn = event.currentTarget;
+  const rect = btn.getBoundingClientRect();
   const menu = document.createElement('div');
   menu.className = 'turns-menu';
 
@@ -1822,7 +1836,7 @@ function showTurnsMenu(event) {
     const item = document.createElement('div');
     item.className = 'turns-menu-item';
     item.textContent = opt.label;
-    item.onclick = (e) => {
+    item.addEventListener('click', (e) => {
       e.stopPropagation();
       menu.remove();
       if (opt.value === 0) {
@@ -1831,23 +1845,37 @@ function showTurnsMenu(event) {
       } else {
         addTurnsToChat(opt.value);
       }
-    };
+    });
     menu.appendChild(item);
   }
 
-  // Position relative to cmd-status
-  const statusEl = document.getElementById('cmd-status');
-  statusEl.appendChild(menu);
+  // Append to body with fixed positioning so it floats above everything
+  document.body.appendChild(menu);
+  menu.style.position = 'fixed';
+  menu.style.zIndex = '9999';
+  menu.style.left = rect.left + 'px';
+  // Position above the button; offsetHeight is available after append
+  menu.style.top = (rect.top - menu.offsetHeight - 4) + 'px';
 }
 
 async function addTurnsToChat(n) {
   if (!activeChatId || !n) return;
   try {
-    await fetch(`/api/chats/${encodeURIComponent(activeChatId)}/add-turns`, {
+    const r = await fetch(`/api/chats/${encodeURIComponent(activeChatId)}/add-turns`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ count: n }),
     });
+    if (r.ok) {
+      const data = await r.json();
+      // Update local cache so UI reflects immediately
+      if (_chatCache[activeChatId]) {
+        _chatCache[activeChatId].max_turns = data.max_turns || ((_chatCache[activeChatId].max_turns || 0) + n);
+      }
+      // Update per-chat state; liveStatus already points to getLs(activeChatId)
+      liveStatus.max_turns = data.max_turns || ((liveStatus.max_turns || 0) + n);
+      updateCmdBar();
+    }
   } catch (e) {
     console.error('addTurnsToChat error:', e);
   }
@@ -1880,7 +1908,17 @@ async function selectChat(chatId) {
   // Cache for SSE turn appending
   _chatCache[chatId] = chat;
 
-  document.getElementById('new-chat-form').style.display = 'none';
+  // Point global liveStatus at this chat's per-chat state object
+  liveStatus = getLs(chatId);
+
+  // Seed per-chat state from API data for any live chat
+  if (liveChats.has(chatId)) {
+    liveStatus.state     = chat.state || liveStatus.state || 'running';
+    liveStatus.max_turns = chat.max_turns || liveStatus.max_turns || 5;
+    liveStatus.turn      = chat.turns ? chat.turns.length : (liveStatus.turn || 0);
+  }
+
+  // (new-chat-form removed — creation is prompt-based now)
   renderChatHeader(chat);
   renderMessages(chat);
   updateCmdBar();
@@ -1919,9 +1957,12 @@ async function loadChatList() {
     if (c._live && !c.ended_at) {
       liveChats.add(c.chat_id);
       activeLiveId = c.chat_id;
-      liveStatus.state = c.state || 'paused';
-      liveStatus.turn = c.turn_count || 0;
-      liveStatus.total_tokens = c.total_tokens || 0;
+      // Seed per-chat state from list data (coarse; selectChat will refine)
+      const cls = getLs(c.chat_id);
+      cls.state = c.state || 'paused';
+      cls.turn = c.turn_count || 0;
+      cls.max_turns = c.max_turns || cls.max_turns || 0;
+      cls.total_tokens = c.total_tokens || 0;
     }
   }
 
@@ -1944,10 +1985,14 @@ function sseConnect() {
 
   eventSource.onopen = () => {
     setWsStatus('connected');
+    loadChatList();
   };
 
   eventSource.onerror = () => {
     setWsStatus('disconnected');
+    if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+      setTimeout(sseConnect, 3000);
+    }
   };
 
   // All event types including new N-agent events
@@ -2027,21 +2072,19 @@ function handleSSEvent(msg) {
   const type = msg.type;
 
   if (type === 'status') {
-    Object.assign(liveStatus, {
-      state:           msg.state            || liveStatus.state,
-      turn:            msg.turn             ?? liveStatus.turn,
-      max_turns:       msg.max_turns        ?? liveStatus.max_turns,
-      total_tokens:    msg.total_tokens     ?? liveStatus.total_tokens,
-      permission_mode: msg.permission_mode  || liveStatus.permission_mode,
-    });
-    // Update per-agent context map if provided
+    // Write to the per-chat state object
+    const ls = getLs(msg.chat_id);
+    if (msg.state) ls.state = msg.state;
+    if (msg.turn !== undefined) ls.turn = msg.turn;
+    if (msg.max_turns) ls.max_turns = msg.max_turns;
+    if (msg.total_tokens !== undefined) ls.total_tokens = msg.total_tokens;
+    if (msg.permission_mode) ls.permission_mode = msg.permission_mode;
     if (msg.context_agents) {
-      liveStatus.context_agents = Object.assign(liveStatus.context_agents || {}, msg.context_agents);
+      ls.context_agents = Object.assign(ls.context_agents || {}, msg.context_agents);
     }
-    // Backward compat: 2-agent context fields
-    if (msg.context_a !== undefined) liveStatus.context_a = msg.context_a;
-    if (msg.context_b !== undefined) liveStatus.context_b = msg.context_b;
-    if (msg.max_context) liveStatus.max_context = msg.max_context;
+    if (msg.context_a !== undefined) ls.context_a = msg.context_a;
+    if (msg.context_b !== undefined) ls.context_b = msg.context_b;
+    if (msg.max_context) ls.max_context = msg.max_context;
 
     if (msg.step_mode !== undefined) stepMode = msg.step_mode;
     if (msg.moderator_mode !== undefined) moderatorMode = msg.moderator_mode;
@@ -2049,8 +2092,13 @@ function handleSSEvent(msg) {
       const summary = allChats.find(c => c.chat_id === msg.chat_id);
       if (summary) summary.state = msg.state;
     }
-    updateCmdBar();
-    updateHeaderAgents();
+
+    // Only update UI if this event is for the currently active chat
+    if (msg.chat_id === activeChatId) {
+      liveStatus = ls;
+      updateCmdBar();
+      updateHeaderAgents();
+    }
     renderSidebar();
   }
 
@@ -2064,7 +2112,7 @@ function handleSSEvent(msg) {
 
     if (isPanelMode()) {
       // Panel mode: create streaming div inside the correct agent panel
-      const panel = document.querySelector(`.agent-panel[data-agent="${speaker}"] .panel-messages`);
+      const panel = findPanel(speaker, ' .panel-messages');
       if (panel) {
         const div = document.createElement('div');
         div.className = 'turn streaming';
@@ -2104,7 +2152,7 @@ function handleSSEvent(msg) {
 
     if (isPanelMode() && speaker) {
       // Panel mode: append to correct panel's streaming text
-      const panel = document.querySelector(`.agent-panel[data-agent="${speaker}"] .panel-messages`);
+      const panel = findPanel(speaker, ' .panel-messages');
       if (panel) {
         const streamEl = panel.querySelector('.streaming .streaming-text');
         if (streamEl) {
@@ -2149,6 +2197,9 @@ function handleSSEvent(msg) {
     const chatId   = msg.chat_id;
     const turnData = msg.turn_data || msg;
 
+    // Write turn state to the per-chat state object
+    const turnLs = getLs(chatId);
+
     // Dedup: moderator turn already rendered optimistically
     if ((turnData.speaker || '') === 'moderator' && window._lastModMsgId) {
       const dEl = document.getElementById(window._lastModMsgId + '-d');
@@ -2159,24 +2210,25 @@ function handleSSEvent(msg) {
       }
       const summary = allChats.find(c => c.chat_id === chatId);
       if (summary) summary.turn_count = (summary.turn_count || 0) + 1;
-      liveStatus.turn = (liveStatus.turn || 0) + 1;
-      if (msg.total_tokens) liveStatus.total_tokens = msg.total_tokens;
-      renderSidebar(); updateCmdBar(); updateHeaderAgents();
+      turnLs.turn = (turnLs.turn || 0) + 1;
+      if (msg.total_tokens) turnLs.total_tokens = msg.total_tokens;
+      if (chatId === activeChatId) { liveStatus = turnLs; updateCmdBar(); updateHeaderAgents(); }
+      renderSidebar();
       return;
     }
 
     // Update per-agent context from turn event (backward compat + new)
-    if (msg.context_a !== undefined) liveStatus.context_a = msg.context_a;
-    if (msg.context_b !== undefined) liveStatus.context_b = msg.context_b;
-    if (msg.max_context) liveStatus.max_context = msg.max_context;
-    if (msg.permission_mode) liveStatus.permission_mode = msg.permission_mode;
+    if (msg.context_a !== undefined) turnLs.context_a = msg.context_a;
+    if (msg.context_b !== undefined) turnLs.context_b = msg.context_b;
+    if (msg.max_context) turnLs.max_context = msg.max_context;
+    if (msg.permission_mode) turnLs.permission_mode = msg.permission_mode;
     if (msg.context_agents) {
-      liveStatus.context_agents = Object.assign(liveStatus.context_agents || {}, msg.context_agents);
+      turnLs.context_agents = Object.assign(turnLs.context_agents || {}, msg.context_agents);
     }
     // Also update single-agent context from turn speaker
     if (turnData.speaker && turnData.input_tokens) {
-      liveStatus.context_agents = liveStatus.context_agents || {};
-      liveStatus.context_agents[turnData.speaker] = turnData.input_tokens;
+      turnLs.context_agents = turnLs.context_agents || {};
+      turnLs.context_agents[turnData.speaker] = turnData.input_tokens;
     }
 
     // Update cached chat data
@@ -2195,14 +2247,16 @@ function handleSSEvent(msg) {
         (turnData.output_tokens || 0) + (turnData.input_tokens || 0);
     }
 
+    turnLs.turn = (turnLs.turn || 0) + 1;
+    if (msg.total_tokens) turnLs.total_tokens = msg.total_tokens;
+
     if (chatId === activeChatId) {
+      liveStatus = turnLs;
       const agents = _chatCache[chatId] ? _chatCache[chatId].agents : null;
       appendTurnToView(turnData, agents);
       if (_chatCache[chatId]) renderChatHeader(_chatCache[chatId]);
     }
 
-    liveStatus.turn = (liveStatus.turn || 0) + 1;
-    if (msg.total_tokens) liveStatus.total_tokens = msg.total_tokens;
     renderSidebar();
     updateCmdBar();
     updateHeaderAgents();
@@ -2232,16 +2286,17 @@ function handleSSEvent(msg) {
     filterChats(document.getElementById('search').value);
     selectChat(chatId);
 
-    liveStatus = {
-      state: 'running', turn: 0,
-      max_turns: msg.max_turns || 0,
-      total_tokens: 0,
-      context_agents: {},
-      context_a: 0, context_b: 0,
+    // Initialize per-chat state for the new chat
+    _lsMap[chatId] = Object.assign(_defaultLS(), {
+      state: msg.state || 'running',
+      max_turns: msg.max_turns || getLs(chatId).max_turns || 0,
       max_context: msg.max_context || 200000,
       permission_mode: msg.permission_mode || 'bypassPermissions',
-    };
-    updateCmdBar();
+    });
+    if (chatId === activeChatId) {
+      liveStatus = _lsMap[chatId];
+      updateCmdBar();
+    }
   }
 
   else if (type === 'chat_ended') {
@@ -2249,8 +2304,9 @@ function handleSSEvent(msg) {
     if (!chatId) return;
 
     liveChats.delete(chatId);
+    getLs(chatId).state = 'ended';
     if (chatId === activeChatId) {
-      liveStatus.state = 'ended';
+      liveStatus = getLs(chatId);
       updateCmdBar();
       updateHeaderAgents();
     }
@@ -2297,7 +2353,8 @@ function handleSSEvent(msg) {
       const color = AGENT_COLORS_HEX[idx % AGENT_COLORS_HEX.length];
       const panel = document.createElement('div');
       panel.className = 'agent-panel';
-      panel.dataset.agent = msg.agent_name;
+      panel.dataset.agent = String(idx);
+      panel.dataset.agentName = msg.agent_name;
       panel.innerHTML = `
         <div class="panel-header">
           <span class="panel-agent-name" style="color:${color}">${esc(msg.agent_name)}</span>
@@ -2310,13 +2367,13 @@ function handleSSEvent(msg) {
   }
 
   else if (type === 'turns_extended') {
-    liveStatus.max_turns = msg.new_max || liveStatus.max_turns;
-    updateCmdBar();
+    getLs(msg.chat_id).max_turns = msg.new_max || getLs(msg.chat_id).max_turns;
+    if (msg.chat_id === activeChatId) { liveStatus = getLs(msg.chat_id); updateCmdBar(); }
   }
 
   else if (type === 'agent_msg') {
     // Show inter-agent message as a notification in the sender's panel
-    const panel = document.querySelector(`.agent-panel[data-agent="${msg.from}"] .panel-messages`);
+    const panel = findPanel(msg.from, ' .panel-messages');
     if (panel) {
       const div = document.createElement('div');
       div.className = 'agent-msg-notification';
@@ -2328,7 +2385,7 @@ function handleSSEvent(msg) {
 
   else if (type === 'report_published') {
     // Show report card in the agent's panel
-    const panel = document.querySelector(`.agent-panel[data-agent="${msg.agent}"] .panel-messages`);
+    const panel = findPanel(msg.agent, ' .panel-messages');
     if (panel) {
       const div = document.createElement('div');
       div.className = 'report-card';
@@ -2366,7 +2423,7 @@ function sendCmd(cmd, arg) {
     console.warn('WS not connected, cannot send command');
     return;
   }
-  ws.send(JSON.stringify({ type: 'command', cmd, arg }));
+  ws.send(JSON.stringify({ type: 'command', cmd, arg, chat_id: activeChatId || '' }));
 }
 
 function sendCmdInput() {
@@ -2386,6 +2443,7 @@ function sendCmdInput() {
 
   sendCmd(cmd, arg);
   input.value = '';
+  input.style.height = 'auto';  // reset textarea height after send
 
   // Show sent message locally using same buildTurnHTML as server
   if (cmd === '/say' && arg && activeChatId) {
@@ -2449,7 +2507,16 @@ function endChat() {
 }
 
 function onCmdKey(event) {
-  if (event.key === 'Enter') sendCmdInput();
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendCmdInput();
+  }
+  // Shift+Enter: default behavior (newline) — no action needed
+}
+
+function autoResizeInput(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 }
 
 // ── Resizable sidebar ────────────────────────────────────────────────────────

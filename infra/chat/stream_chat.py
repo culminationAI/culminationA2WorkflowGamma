@@ -33,6 +33,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -132,12 +133,15 @@ class HttpBroadcaster:
         except Exception:
             pass  # Don't interrupt chat if server is unreachable
 
-    def poll_commands(self) -> list[dict]:
-        """GET /api/commands and return pending moderator command dicts."""
+    def poll_commands(self, chat_id: str = "") -> list[dict]:
+        """GET /api/commands?chat_id=X and return pending moderator command dicts."""
         if not self._enabled:
             return []
         try:
-            req = urllib.request.Request(f"{self.base_url}/api/commands")
+            url = f"{self.base_url}/api/commands"
+            if chat_id:
+                url += f"?chat_id={urllib.parse.quote(chat_id)}"
+            req = urllib.request.Request(url)
             resp = urllib.request.urlopen(req, timeout=1)
             return json.loads(resp.read())
         except Exception:
@@ -715,6 +719,7 @@ class StreamChatOrchestrator:
 
         # Moderator control state
         self._moderator_injection: Optional[str] = None
+        self._moderator_target: Optional[str] = None
         self._force_next: Optional[str] = None
         self._paused: bool = False
         self._ended: bool = False
@@ -981,6 +986,19 @@ class StreamChatOrchestrator:
             if self._ended or self._sync_requested:
                 break
 
+            # Handle pause: spin until resumed
+            while self._paused and not self._ended:
+                time.sleep(0.3)
+                self._drain_pending(self.topic)
+            if self._ended:
+                break
+
+            # Snapshot and clear moderator injection before building prompts
+            inj = self._moderator_injection
+            tgt = self._moderator_target
+            self._moderator_injection = None
+            self._moderator_target = None
+
             # Build prompts, inject inbox content if available
             prompts: dict[str, str] = {}
             for agent in self.agents:
@@ -988,6 +1006,9 @@ class StreamChatOrchestrator:
                 inbox = self._mailboxes[agent.name].format_for_prompt()
                 if inbox:
                     base = f"{inbox}\n\n{base}"
+                # Apply moderator injection only to the targeted agent (or all if no target)
+                if inj and (tgt is None or tgt == agent.name):
+                    base = f"[MODERATOR]: {inj}\n\n{base}"
                 prompts[agent.name] = base
 
             round_results = self._run_round(prompts)
@@ -1061,17 +1082,36 @@ class StreamChatOrchestrator:
             return current_topic
 
         elif cmd == "/say":
-            self._moderator_injection = arg
+            # Parse optional @mention: /say @agentName text
+            _say_target: Optional[str] = None
+            _say_text: str = arg
+            _m = re.match(r'^@(\S+)\s+(.*)', arg, re.DOTALL)
+            if _m and _m.group(1) in [a.name for a in self.agents]:
+                _say_target = _m.group(1)
+                _say_text = _m.group(2).strip()
+            self._moderator_target = _say_target
+            self._moderator_injection = _say_text
             _print_moderator_header()
             print(f"  {C_YELLOW}{arg}{RESET}", flush=True)
             with self._cmd_lock:
+                turn_num = len(self.turns) + 1
+                ts = datetime.now(timezone.utc).isoformat()
                 self.turns.append(TurnRecord(
-                    turn=len(self.turns) + 1,
+                    turn=turn_num,
                     speaker="moderator",
                     text=arg,
                     cost=0.0,
-                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    timestamp=ts,
                 ))
+            if self._broadcaster:
+                self._broadcaster.send_event({
+                    "type": "turn",
+                    "chat_id": self.chat_id,
+                    "turn": turn_num,
+                    "speaker": "moderator",
+                    "text": arg,
+                    "timestamp": ts,
+                })
             return current_topic
 
         elif cmd == "/topic":
@@ -1140,11 +1180,29 @@ class StreamChatOrchestrator:
         elif cmd == "/pause":
             _sys("Conversation paused. Type /resume to continue.")
             self._paused = True
+            if self._broadcaster:
+                self._broadcaster.send_event({
+                    "type": "status",
+                    "chat_id": self.chat_id,
+                    "state": "paused",
+                    "turn": len(self.turns),
+                    "max_turns": self.max_turns,
+                    "total_tokens": self.total_tokens,
+                })
             return current_topic
 
         elif cmd == "/resume":
             self._paused = False
             _sys("Conversation resumed.")
+            if self._broadcaster:
+                self._broadcaster.send_event({
+                    "type": "status",
+                    "chat_id": self.chat_id,
+                    "state": "running",
+                    "turn": len(self.turns),
+                    "max_turns": self.max_turns,
+                    "total_tokens": self.total_tokens,
+                })
             return current_topic
 
         elif cmd == "/budget":
@@ -1205,7 +1263,7 @@ class StreamChatOrchestrator:
         while not self._poll_stop.is_set():
             if self._broadcaster and hasattr(self._broadcaster, "poll_commands"):
                 try:
-                    for ui_cmd in self._broadcaster.poll_commands():
+                    for ui_cmd in self._broadcaster.poll_commands(self.chat_id):
                         cmd_str = ui_cmd.get("cmd", "").strip()
                         arg_str = ui_cmd.get("arg", "").strip()
                         if cmd_str:
@@ -1298,6 +1356,7 @@ class StreamChatOrchestrator:
                 "max_turns": self.max_turns,
                 "max_context": 200000,
                 "permission_mode": self.agents[0].permission_mode if self.agents else "default",
+                "state": "paused" if self._start_paused else "running",
             })
 
         # Start-paused: wait for resume signal from broadcaster
@@ -1306,14 +1365,28 @@ class StreamChatOrchestrator:
             self._paused = True
             while self._paused and not self._ended:
                 time.sleep(0.5)
-                for ui_cmd in (self._broadcaster.poll_commands()
+                for ui_cmd in (self._broadcaster.poll_commands(self.chat_id)
                                if hasattr(self._broadcaster, "poll_commands") else []):
                     cmd_str = ui_cmd.get("cmd", "").strip()
+                    arg_str = ui_cmd.get("arg", "").strip()
                     if cmd_str == "/resume":
                         self._paused = False
+                        _sys("Conversation resumed.")
+                        if hasattr(self._broadcaster, "send_event"):
+                            self._broadcaster.send_event({  # type: ignore[union-attr]
+                                "type": "status", "chat_id": self.chat_id,
+                                "state": "running", "turn": len(self.turns),
+                                "max_turns": self.max_turns,
+                                "total_tokens": self.total_tokens,
+                            })
                     elif cmd_str == "/end":
                         self._ended = True
                         self._paused = False
+                    elif cmd_str == "/turns":
+                        self._apply_moderator_cmd(cmd_str, arg_str, "")
+                    elif cmd_str == "/say":
+                        # Record the turn + queue injection for after resume
+                        self._apply_moderator_cmd(cmd_str, arg_str, "")
 
         if self._ended:
             self._finish()
@@ -1352,6 +1425,13 @@ class StreamChatOrchestrator:
 
                 # Drain async UI commands
                 current_topic = self._drain_pending(current_topic)
+                if self._ended:
+                    break
+
+                # Handle pause: spin until resumed
+                while self._paused and not self._ended:
+                    time.sleep(0.3)
+                    current_topic = self._drain_pending(current_topic)
                 if self._ended:
                     break
 
