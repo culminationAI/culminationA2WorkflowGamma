@@ -14,7 +14,7 @@ Usage:
         --project-name sibyl \\
         --topic "Architecture review" \\
         --max-turns 20 \\
-        --max-budget 5.0
+        --max-tokens 200000
 
     # Auto mode (no moderator pause between turns):
     python3 infra/chat/stream_chat.py --topic "..." --auto --auto-delay 3
@@ -77,6 +77,46 @@ def extract_facts(text: str) -> list[tuple[str, str]]:
     return FACT_RE.findall(text)
 
 
+def _route_fact_to_exchange(
+    body: str,
+    from_agent: str,
+    to_agent: str,
+    turn: int,
+    chat_id: str,
+    exchange_url: str,
+    attrs_str: str = "",
+) -> bool:
+    """POST a fact to the exchange server as type 'knowledge'. Returns True on success."""
+    import urllib.request
+
+    subject_m = re.search(r'subject="([^"]*)"', attrs_str)
+    subject = subject_m.group(1) if subject_m else "chat_fact"
+
+    msg = {
+        "from_agent": from_agent,
+        "to_agent": to_agent,
+        "type": "knowledge",
+        "subject": subject,
+        "body": json.dumps({
+            "fact": body.strip(),
+            "chat_turn": turn,
+            "chat_id": chat_id,
+        }),
+    }
+    req = urllib.request.Request(
+        f"{exchange_url}/messages",
+        data=json.dumps(msg).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        urllib.request.urlopen(req, timeout=5)
+        return True
+    except Exception as exc:
+        _sys(f"Exchange POST failed: {exc}")
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Dataclasses
 # ---------------------------------------------------------------------------
@@ -88,9 +128,11 @@ class ChatAgent:
     role: str = ""          # optional role description
     capsule: str = ""       # identity capsule text (populated at startup)
     session_id: str = ""
-    total_cost: float = 0.0
-    last_turn_cost: float = 0.0
-    budget: float = 5.0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    last_input_tokens: int = 0
+    last_output_tokens: int = 0
+    cli_budget: float = 5.0     # passed to claude -p --max-budget-usd (safety limit)
     color: str = C_CYAN
 
 
@@ -99,8 +141,9 @@ class TurnRecord:
     turn: int
     speaker: str            # agent name, or "moderator"
     text: str
-    cost: float
-    timestamp: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    timestamp: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -125,8 +168,15 @@ def _sep(char: str = "─", width: int = 60) -> None:
     print(f"{DIM}{char * width}{RESET}", flush=True)
 
 
+def _fmt_tokens(n: int) -> str:
+    """Format token count: 1234 -> '1.2K', 12345 -> '12.3K', 123 -> '123'."""
+    if n >= 1000:
+        return f"{n/1000:.1f}K"
+    return str(n)
+
+
 def _print_header(agent_a: ChatAgent, agent_b: ChatAgent, topic: str,
-                  max_budget: float, max_turns: int) -> None:
+                  max_turns: int) -> None:
     print()
     _sep("═")
     print(f"{BOLD}  Stream Chat: "
@@ -134,19 +184,20 @@ def _print_header(agent_a: ChatAgent, agent_b: ChatAgent, topic: str,
           f"{BOLD}<->{RESET} "
           f"{agent_b.color}{agent_b.name}{RESET}")
     print(f"  Topic: {topic}")
-    print(f"  Budget: ${max_budget:.2f} | Max turns: {max_turns}")
+    print(f"  Max turns: {max_turns}")
     _sep("═")
     print()
 
 
 def _print_turn_header(turn: int, max_turns: int, agent: ChatAgent,
-                       total_cost: float, max_budget: float) -> None:
+                       total_tokens: int, max_tokens: int) -> None:
     bar = f"Turn {turn}/{max_turns}"
-    budget_str = f"${total_cost:.3f}/${max_budget:.2f}"
-    print(f"\n{_sep.__module__ and ''}"
-          f"{DIM}{'─'*60}{RESET}")
+    tok_str = f"{_fmt_tokens(total_tokens)}"
+    if max_tokens > 0:
+        tok_str += f"/{_fmt_tokens(max_tokens)}"
+    print(f"\n{DIM}{'─'*60}{RESET}")
     print(f"  {agent.color}{BOLD}{agent.name}{RESET}  "
-          f"{DIM}{bar} | {budget_str}{RESET}")
+          f"{DIM}{bar} | {tok_str} tokens{RESET}")
     print(f"{DIM}{'─'*60}{RESET}", flush=True)
 
 
@@ -180,66 +231,63 @@ def _print_help() -> None:
 # ---------------------------------------------------------------------------
 # Streaming agent invocation
 # ---------------------------------------------------------------------------
-def _extract_text_from_chunk(chunk: dict) -> str:
+def _extract_text_from_chunk(chunk: dict, _streamed: list | None = None) -> str:
     """
     Extract displayable text from a stream-json chunk.
 
-    Claude CLI stream-json emits multiple event types. We look for:
-      - {"type": "assistant", "message": {"content": [{"type": "text", "text": "..."}]}}
-      - {"type": "text", "text": "..."}
-      - {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "..."}}
-      - {"result": "..."} (non-streaming fallback)
+    Priority: content_block_delta (incremental streaming). The "assistant"
+    and "result" events carry the FULL text and are only used as fallback
+    when no deltas were received (to avoid duplication).
     """
-    # Standard streaming assistant message
-    if chunk.get("type") == "assistant":
-        msg = chunk.get("message", {})
-        content = msg.get("content", [])
-        if isinstance(content, list):
-            return "".join(
-                c.get("text", "") for c in content if c.get("type") == "text"
-            )
+    raw = chunk  # keep original for top-level checks
 
-    # Direct text chunk
-    if chunk.get("type") == "text":
-        return chunk.get("text", "")
+    # Unwrap stream_event envelope from Claude CLI stream-json
+    if chunk.get("type") == "stream_event":
+        chunk = chunk.get("event", {})
 
-    # Content block delta (Anthropic streaming format)
+    # Content block delta — incremental streaming text (primary path)
     if chunk.get("type") == "content_block_delta":
         delta = chunk.get("delta", {})
         if delta.get("type") == "text_delta":
             return delta.get("text", "")
 
-    # Non-streaming json output fallback
-    if "result" in chunk and isinstance(chunk["result"], str):
-        return chunk["result"]
+    # Skip "assistant" and "result" events — they contain the FULL text
+    # which would duplicate what we already got from content_block_delta.
+    # These are handled only in the fallback path (_invoke_agent_fallback).
 
     return ""
 
 
-def _extract_metadata_from_chunk(chunk: dict) -> tuple[Optional[str], float]:
+def _extract_metadata_from_chunk(raw_chunk: dict) -> tuple[Optional[str], int, int]:
     """
-    Extract (session_id, cost_usd) from result/system chunks.
-    Returns (None, 0.0) if not present.
+    Extract (session_id, input_tokens, output_tokens) from stream-json chunks.
+    Returns (None, 0, 0) if not present.
     """
-    session_id: Optional[str] = chunk.get("session_id") or None
-    cost: float = 0.0
+    session_id: Optional[str] = raw_chunk.get("session_id") or None
+    input_tokens = 0
+    output_tokens = 0
 
-    # Top-level cost_usd (stream-json result event)
-    if "cost_usd" in chunk:
-        try:
-            cost = float(chunk["cost_usd"])
-        except (TypeError, ValueError):
-            pass
+    # Unwrap to get event
+    event = raw_chunk
+    if raw_chunk.get("type") == "stream_event":
+        event = raw_chunk.get("event", {})
 
-    # Nested usage in result event: {"usage": {"total_cost": ...}}
-    usage = chunk.get("usage", {})
-    if isinstance(usage, dict) and "total_cost" in usage:
-        try:
-            cost = float(usage["total_cost"])
-        except (TypeError, ValueError):
-            pass
+    # message_start has input token count
+    if event.get("type") == "message_start":
+        msg_usage = event.get("message", {}).get("usage", {})
+        input_tokens = msg_usage.get("input_tokens", 0)
 
-    return session_id, cost
+    # message_delta has output token count
+    if event.get("type") == "message_delta":
+        usage = event.get("usage", {})
+        output_tokens = usage.get("output_tokens", 0)
+
+    # json format fallback — has usage block with both
+    if "usage" in raw_chunk and isinstance(raw_chunk["usage"], dict):
+        input_tokens = raw_chunk["usage"].get("input_tokens", 0) or input_tokens
+        output_tokens = raw_chunk["usage"].get("output_tokens", 0) or output_tokens
+
+    return session_id, input_tokens, output_tokens
 
 
 def invoke_agent(
@@ -248,20 +296,23 @@ def invoke_agent(
     timeout: int = 180,
 ) -> Iterator[str]:
     """
-    Invoke `claude -p --output-format stream-json` and yield text chunks.
+    Invoke `claude -p --output-format stream-json --include-partial-messages`
+    and yield text chunks as they arrive.
 
     Falls back to `--output-format json` with a typewriter effect if
-    stream-json produces no text chunks after 5 non-empty lines.
+    stream-json produces no text at all (e.g. CLI version mismatch).
 
-    The generator also updates agent.session_id and agent.last_turn_cost
-    as side effects (they are populated from result chunks before the
-    generator is exhausted).
+    Updates agent.session_id and token counters as side effects.
     """
+    import threading
+
     cmd = [
         "claude", "-p",
         "--output-format", "stream-json",
+        "--include-partial-messages",
+        "--verbose",
         "--permission-mode", "bypassPermissions",
-        "--max-budget-usd", str(agent.budget),
+        "--max-budget-usd", str(agent.cli_budget),
     ]
     if agent.capsule:
         cmd.extend(["--append-system-prompt", agent.capsule])
@@ -287,10 +338,21 @@ def invoke_agent(
     proc.stdin.close()
 
     accumulated_text = ""
-    non_empty_lines = 0
-    got_text_chunk = False
     session_id_seen: Optional[str] = None
-    cost_seen: float = 0.0
+    input_tokens_total = 0
+    output_tokens_total = 0
+
+    # Timeout watchdog — kill process if it exceeds the limit
+    timed_out = False
+
+    def _timeout_kill():
+        nonlocal timed_out
+        timed_out = True
+        if proc.poll() is None:
+            proc.kill()
+
+    timer = threading.Timer(timeout, _timeout_kill)
+    timer.start()
 
     try:
         for raw_line in proc.stdout:
@@ -298,68 +360,49 @@ def invoke_agent(
             if not raw_line:
                 continue
 
-            non_empty_lines += 1
-
             try:
                 chunk = json.loads(raw_line)
             except json.JSONDecodeError:
-                # Non-JSON line — could be a debug message, skip silently
                 continue
 
-            # Extract metadata from every chunk
-            sid, cost = _extract_metadata_from_chunk(chunk)
+            # Extract metadata (session_id + tokens) from every chunk
+            sid, in_tok, out_tok = _extract_metadata_from_chunk(chunk)
             if sid:
                 session_id_seen = sid
-            if cost > 0:
-                cost_seen = cost
+            input_tokens_total += in_tok
+            output_tokens_total += out_tok
 
             # Extract and yield text
             text = _extract_text_from_chunk(chunk)
             if text:
-                got_text_chunk = True
                 accumulated_text += text
                 yield text
-
-            # After 10 non-empty non-text lines, assume stream-json isn't
-            # delivering incremental text — switch to typewriter fallback below
-            if non_empty_lines >= 10 and not got_text_chunk:
-                break
 
     except Exception as exc:
         _sys(f"Stream read error: {exc}")
 
-    # Drain remaining stdout to unblock the process
-    remaining = proc.stdout.read()
-
-    # Try to parse remaining output for metadata / full result
-    if not got_text_chunk and remaining.strip():
-        for raw_line in remaining.splitlines():
-            raw_line = raw_line.strip()
-            if not raw_line:
-                continue
+    finally:
+        timer.cancel()
+        # Always clean up the subprocess
+        if proc.poll() is None:
+            proc.terminate()
             try:
-                chunk = json.loads(raw_line)
-                sid, cost = _extract_metadata_from_chunk(chunk)
-                if sid:
-                    session_id_seen = sid
-                if cost > 0:
-                    cost_seen = cost
-                text = _extract_text_from_chunk(chunk)
-                if text:
-                    got_text_chunk = True
-                    accumulated_text += text
-            except json.JSONDecodeError:
-                continue
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=2)
 
-    proc.wait(timeout=5)
+    if timed_out:
+        _sys(f"Turn timed out after {timeout}s")
 
     # Typewriter fallback: if stream-json gave no text, try json output format
-    if not got_text_chunk:
+    if not accumulated_text:
         _sys("stream-json produced no text — falling back to json output with typewriter effect")
-        fallback_text, fallback_sid, fallback_cost = _invoke_agent_fallback(agent, prompt, timeout)
+        fallback_text, fallback_sid, fb_in, fb_out = _invoke_agent_fallback(agent, prompt, timeout)
         if fallback_text:
             session_id_seen = fallback_sid or session_id_seen
-            cost_seen = fallback_cost or cost_seen
+            input_tokens_total += fb_in
+            output_tokens_total += fb_out
             for char in fallback_text:
                 yield char
                 time.sleep(0.005)  # typewriter delay: ~200 chars/sec
@@ -367,25 +410,26 @@ def invoke_agent(
     # Update agent metadata after streaming completes
     if session_id_seen:
         agent.session_id = session_id_seen
-    if cost_seen > 0:
-        agent.last_turn_cost = cost_seen
-        agent.total_cost += cost_seen
+    agent.last_input_tokens = input_tokens_total
+    agent.last_output_tokens = output_tokens_total
+    agent.total_input_tokens += input_tokens_total
+    agent.total_output_tokens += output_tokens_total
 
 
 def _invoke_agent_fallback(
     agent: ChatAgent,
     prompt: str,
     timeout: int,
-) -> tuple[Optional[str], Optional[str], float]:
+) -> tuple[Optional[str], Optional[str], int, int]:
     """
     Fallback invocation using --output-format json (non-streaming).
-    Returns (text, session_id, cost_usd).
+    Returns (text, session_id, input_tokens, output_tokens).
     """
     cmd = [
         "claude", "-p",
         "--output-format", "json",
         "--permission-mode", "bypassPermissions",
-        "--max-budget-usd", str(agent.budget),
+        "--max-budget-usd", str(agent.cli_budget),
     ]
     if agent.capsule:
         cmd.extend(["--append-system-prompt", agent.capsule])
@@ -404,27 +448,28 @@ def _invoke_agent_fallback(
         )
     except subprocess.TimeoutExpired:
         _sys(f"Fallback timeout after {timeout}s")
-        return None, None, 0.0
+        return None, None, 0, 0
     except Exception as exc:
         _sys(f"Fallback invocation error: {exc}")
-        return None, None, 0.0
+        return None, None, 0, 0
 
     if not proc.stdout.strip():
         _sys(f"Fallback: empty stdout (exit {proc.returncode})")
         if proc.stderr:
             _sys(f"Fallback stderr: {proc.stderr[:300]}")
-        return None, None, 0.0
+        return None, None, 0, 0
 
     try:
         data = json.loads(proc.stdout.strip())
         text = (data.get("result") or data.get("content") or "").strip()
         sid = data.get("session_id")
-        cost = float(data.get("cost_usd", 0.0))
-        return text or None, sid, cost
+        usage = data.get("usage", {})
+        in_tok = usage.get("input_tokens", 0) if isinstance(usage, dict) else 0
+        out_tok = usage.get("output_tokens", 0) if isinstance(usage, dict) else 0
+        return text or None, sid, in_tok, out_tok
     except (json.JSONDecodeError, ValueError):
-        # Raw text fallback
         raw = proc.stdout.strip()
-        return raw if raw else None, None, 0.0
+        return raw if raw else None, None, 0, 0
 
 
 # ---------------------------------------------------------------------------
@@ -511,7 +556,6 @@ def save_log(log_path: Path, chat_id: str, topic: str,
              project_name: str, turns: list[TurnRecord],
              facts: list[str], started_at: str) -> None:
     """Write the full chat log as JSON."""
-    total_cost = agent_a.total_cost + agent_b.total_cost
     data = {
         "chat_id": chat_id,
         "started_at": started_at,
@@ -524,7 +568,8 @@ def save_log(log_path: Path, chat_id: str, topic: str,
         },
         "turns": [dataclasses.asdict(t) for t in turns],
         "facts": facts,
-        "total_cost": round(total_cost, 6),
+        "total_input_tokens": agent_a.total_input_tokens + agent_b.total_input_tokens,
+        "total_output_tokens": agent_a.total_output_tokens + agent_b.total_output_tokens,
     }
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -546,22 +591,24 @@ class StreamChatOrchestrator:
         topic: str,
         project_name: str,
         max_turns: int,
-        max_budget: float,
+        max_tokens: int,
         auto_mode: bool,
         auto_delay: float,
         timeout: int,
         chat_id: str,
+        exchange_url: str = "",
     ) -> None:
         self.agent_a = agent_a
         self.agent_b = agent_b
         self.topic = topic
         self.project_name = project_name
         self.max_turns = max_turns
-        self.max_budget = max_budget
+        self.max_tokens = max_tokens
         self.auto_mode = auto_mode
         self.auto_delay = auto_delay
         self.timeout = timeout
         self.chat_id = chat_id
+        self.exchange_url = exchange_url
 
         self.turns: list[TurnRecord] = []
         self.facts: list[str] = []
@@ -574,8 +621,9 @@ class StreamChatOrchestrator:
         self._ended: bool = False
 
     @property
-    def total_cost(self) -> float:
-        return self.agent_a.total_cost + self.agent_b.total_cost
+    def total_tokens(self) -> int:
+        return (self.agent_a.total_input_tokens + self.agent_a.total_output_tokens +
+                self.agent_b.total_input_tokens + self.agent_b.total_output_tokens)
 
     def _agent_for_turn(self, turn: int) -> ChatAgent:
         """Determine which agent speaks on this turn (or use forced agent)."""
@@ -593,15 +641,40 @@ class StreamChatOrchestrator:
                       current_topic: str) -> str:
         """
         Compose the prompt for the current agent.
-        Turn 1: open with topic. Subsequent turns: respond to last response.
-        Moderator injection is appended if present.
+        Turn 1: open with topic. Subsequent turns: respond with full context.
+        Moderator injection is prepended if present.
         """
         if turn == 1:
-            base = f"Topic: {current_topic}\n\nYou start the conversation."
+            base = (
+                f"Topic: {current_topic}\n\n"
+                f"You are starting a conversation with another AI agent about this topic. "
+                f"Share your analysis, insights, and questions. Be substantive — "
+                f"aim for 2-4 paragraphs. Use [FACT]...[/FACT] tags for key discoveries."
+            )
         elif last_response:
-            base = last_response
+            # Build richer context for responding agent
+            agent = self._agent_for_turn(turn)
+            other = self.agent_b if agent == self.agent_a else self.agent_a
+
+            # Include last 2-3 turns for context (not just the last one)
+            recent_context = ""
+            relevant_turns = [t for t in self.turns[-3:] if t.speaker != "moderator"]
+            if len(relevant_turns) > 1:
+                for t in relevant_turns[:-1]:
+                    recent_context += f"[{t.speaker}]: {t.text[:500]}\n\n"
+
+            base = f"Topic: {current_topic}\n\n"
+            if recent_context:
+                base += f"Earlier in the conversation:\n{recent_context}\n"
+
+            base += (
+                f"[{other.name}] just said:\n{last_response}\n\n"
+                f"Respond substantively. Share your own analysis, build on their points, "
+                f"raise new questions or perspectives. Aim for 2-4 paragraphs. "
+                f"Use [FACT]...[/FACT] tags for key discoveries."
+            )
         else:
-            base = "Please continue the discussion."
+            base = f"Topic: {current_topic}\n\nPlease continue the discussion."
 
         if self._moderator_injection:
             injection = self._moderator_injection
@@ -634,7 +707,6 @@ class StreamChatOrchestrator:
                     turn=len(self.turns) + 1,
                     speaker="moderator",
                     text=arg,
-                    cost=0.0,
                     timestamp=datetime.now(timezone.utc).isoformat(),
                 ))
                 return current_topic
@@ -677,14 +749,13 @@ class StreamChatOrchestrator:
                 return current_topic
 
             elif cmd == "/budget":
-                remaining = max(0.0, self.max_budget - self.total_cost)
                 print(
-                    f"  {C_YELLOW}Budget: ${self.total_cost:.4f} spent / "
-                    f"${self.max_budget:.2f} total / "
-                    f"${remaining:.4f} remaining{RESET}",
+                    f"  {C_YELLOW}Tokens: {_fmt_tokens(self.total_tokens)} used"
+                    + (f" / {_fmt_tokens(self.max_tokens)} limit" if self.max_tokens > 0 else "")
+                    + f"{RESET}",
                     flush=True,
                 )
-                # Show prompt again after budget info
+                # Show prompt again after token info
                 continue
 
             elif cmd == "/help":
@@ -708,18 +779,33 @@ class StreamChatOrchestrator:
                 print(chunk, end="", flush=True)
                 full_text += chunk
         except KeyboardInterrupt:
-            # User hit Ctrl+C during streaming — stop this turn gracefully
             print(f"{RESET}")
             _sys("Turn interrupted by user.")
             raise
 
         print(f"{RESET}", flush=True)
+
+        # Session resume fallback: if empty response and agent had a session,
+        # clear session_id and retry once with a fresh session
+        if not full_text.strip() and agent.session_id:
+            _sys(f"Empty response — retrying {agent.name} without --resume")
+            stale_sid = agent.session_id
+            agent.session_id = ""
+            print(f"\n  {agent.color}", end="", flush=True)
+            try:
+                for chunk in invoke_agent(agent, prompt, timeout=self.timeout):
+                    print(chunk, end="", flush=True)
+                    full_text += chunk
+            except KeyboardInterrupt:
+                print(f"{RESET}")
+                raise
+            print(f"{RESET}", flush=True)
+
         return full_text
 
     def run(self) -> None:
         """Main chat loop."""
-        _print_header(self.agent_a, self.agent_b, self.topic,
-                      self.max_budget, self.max_turns)
+        _print_header(self.agent_a, self.agent_b, self.topic, self.max_turns)
 
         if self.auto_mode:
             _sys(f"Auto mode: {self.auto_delay}s delay between turns. Ctrl+C to stop.")
@@ -733,8 +819,8 @@ class StreamChatOrchestrator:
             if self._ended:
                 break
 
-            if self.total_cost >= self.max_budget:
-                _sys(f"Budget limit ${self.max_budget:.2f} reached — stopping.")
+            if self.max_tokens > 0 and self.total_tokens >= self.max_tokens:
+                _sys(f"Token limit {_fmt_tokens(self.max_tokens)} reached — stopping.")
                 break
 
             agent = self._agent_for_turn(turn)
@@ -742,7 +828,7 @@ class StreamChatOrchestrator:
 
             # Print turn header
             _print_turn_header(turn, self.max_turns, agent,
-                               self.total_cost, self.max_budget)
+                               self.total_tokens, self.max_tokens)
 
             # Stream the response
             try:
@@ -755,17 +841,25 @@ class StreamChatOrchestrator:
                 last_response = None
                 continue
 
-            # Extract and display facts inline
+            # Extract and display facts inline; route to exchange if available
+            other = self.agent_b if agent == self.agent_a else self.agent_a
             fact_matches = extract_facts(full_text)
-            for _attrs, body in fact_matches:
+            for attrs_str, body in fact_matches:
                 body_clean = body.strip()
                 _print_fact(body_clean)
                 self.facts.append(body_clean)
+                if self.exchange_url:
+                    _route_fact_to_exchange(
+                        body_clean, agent.name, other.name,
+                        turn, self.chat_id, self.exchange_url,
+                        attrs_str=attrs_str,
+                    )
 
-            # Cost line
+            # Token usage line
             print(
-                f"\n  {DIM}Turn: ${agent.last_turn_cost:.4f} | "
-                f"Total: ${self.total_cost:.4f}{RESET}",
+                f"\n  {DIM}Turn: {_fmt_tokens(agent.last_input_tokens)} in / "
+                f"{_fmt_tokens(agent.last_output_tokens)} out | "
+                f"Total: {_fmt_tokens(self.total_tokens)} tokens{RESET}",
                 flush=True,
             )
 
@@ -774,7 +868,8 @@ class StreamChatOrchestrator:
                 turn=turn,
                 speaker=agent.name,
                 text=full_text,
-                cost=agent.last_turn_cost,
+                input_tokens=agent.last_input_tokens,
+                output_tokens=agent.last_output_tokens,
                 timestamp=datetime.now(timezone.utc).isoformat(),
             ))
 
@@ -801,7 +896,7 @@ class StreamChatOrchestrator:
         print(f"{BOLD}  Conversation ended.{RESET}")
         print(f"  Turns completed: {len([t for t in self.turns if t.speaker != 'moderator'])}")
         print(f"  Facts extracted: {len(self.facts)}")
-        print(f"  Total cost:      ${self.total_cost:.4f}")
+        print(f"  Total tokens:    {_fmt_tokens(self.total_tokens)}")
         _sep("═")
 
         # Save log
@@ -880,8 +975,12 @@ def _parse_args() -> argparse.Namespace:
         help="Maximum number of turns (default: 20)",
     )
     parser.add_argument(
-        "--max-budget", type=float, default=5.0,
-        help="Maximum total spend in USD (default: 5.0)",
+        "--max-tokens", type=int, default=0,
+        help="Maximum total tokens (0 = unlimited, default: 0)",
+    )
+    parser.add_argument(
+        "--cli-budget", type=float, default=5.0,
+        help="Per-agent safety budget for claude CLI in USD (default: 5.0)",
     )
     parser.add_argument(
         "--timeout", type=int, default=180,
@@ -896,6 +995,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--auto-delay", type=float, default=2.0,
         help="Seconds to wait between turns in auto mode (default: 2.0)",
+    )
+
+    # Exchange
+    parser.add_argument(
+        "--exchange-url", default="",
+        help="Exchange server URL for fact routing (e.g. http://localhost:8889). Empty = no routing.",
     )
 
     return parser.parse_args()
@@ -925,19 +1030,16 @@ def main() -> None:
             print(f"ERROR: {label} path not found: {path}", file=sys.stderr)
             sys.exit(1)
 
-    # Per-agent budget: each agent gets half of the total
-    per_agent_budget = round(args.max_budget / 2, 4)
-
     # Generate chat id
     chat_id = f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
 
-    # Build agent objects
+    # Build agent objects — each gets the full cli_budget as a safety cap
     agent_a = ChatAgent(
         name=args.agent_a,
         workspace=ws_a,
         project_cwd=project_path,
         role=args.role_a,
-        budget=per_agent_budget,
+        cli_budget=args.cli_budget,
         color=C_CYAN,
     )
     agent_b = ChatAgent(
@@ -945,7 +1047,7 @@ def main() -> None:
         workspace=ws_b,
         project_cwd=project_path,
         role=args.role_b,
-        budget=per_agent_budget,
+        cli_budget=args.cli_budget,
         color=C_MAGENTA,
     )
 
@@ -961,11 +1063,12 @@ def main() -> None:
         topic=topic,
         project_name=project_name,
         max_turns=args.max_turns,
-        max_budget=args.max_budget,
+        max_tokens=args.max_tokens,
         auto_mode=args.auto,
         auto_delay=args.auto_delay,
         timeout=args.timeout,
         chat_id=chat_id,
+        exchange_url=args.exchange_url,
     )
 
     try:
