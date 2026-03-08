@@ -222,6 +222,8 @@ def write_memories(records: list[dict]) -> dict[str, int]:
                 "agent_id": agent_id,
                 "_source": PROJECT_SOURCE,  # workspace isolation tag
             }
+            if metadata.get("_project_concern"):
+                payload["_project_concern"] = metadata["_project_concern"]
             if metadata:
                 payload["metadata"] = metadata
 

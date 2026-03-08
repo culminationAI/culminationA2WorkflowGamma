@@ -35,7 +35,7 @@ def _detect_source() -> str:
 PROJECT_SOURCE = _detect_source()
 
 
-def search(query: str, limit: int = 10, user_id: str | None = None, source: str | None = None) -> list[dict]:
+def search(query: str, limit: int = 10, user_id: str | None = None, source: str | None = None, project_concern: str | None = None) -> list[dict]:
     vector = get_embedding(query)
 
     body = {
@@ -49,6 +49,8 @@ def search(query: str, limit: int = 10, user_id: str | None = None, source: str 
         must_conditions.append({"key": "user_id", "match": {"value": user_id}})
     if source:
         must_conditions.append({"key": "_source", "match": {"value": source}})
+    if project_concern:
+        must_conditions.append({"key": "_project_concern", "match": {"value": project_concern}})
     if must_conditions:
         body["filter"] = {"must": must_conditions}
 
@@ -164,13 +166,14 @@ def main():
                         help=f"Filter by _source tag (default: {PROJECT_SOURCE}, use 'all' for no filter)")
     parser.add_argument("--graph", "-g", action="store_true",
                         help="Use Neo4j graph traversal (2-hop neighborhood) instead of vector search")
+    parser.add_argument("--project-concern", help="Filter by project concern tag (_project_concern field)")
     args = parser.parse_args()
 
     if args.graph:
         results = graph_search(args.query, args.limit)
     else:
         source_filter = None if args.source == "all" else args.source
-        results = search(args.query, args.limit, args.user_id, source=source_filter)
+        results = search(args.query, args.limit, args.user_id, source=source_filter, project_concern=args.project_concern)
     print(json.dumps(results, indent=2, ensure_ascii=False))
 
 
