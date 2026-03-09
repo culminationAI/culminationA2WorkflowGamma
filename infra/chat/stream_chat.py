@@ -781,6 +781,9 @@ class StreamChatOrchestrator:
         """
         if turn == 1:
             base = f"Topic: {current_topic}\n\nYou start the conversation."
+        elif len(self.agents) == 1:
+            # Single-agent reactive mode: don't echo own response back as prompt
+            base = f"Topic: {current_topic}\n\nContinue based on moderator input."
         elif last_response:
             base = last_response
         else:
@@ -1418,6 +1421,7 @@ class StreamChatOrchestrator:
         else:
             # SEQUENTIAL MODE: legacy turn-by-turn (2-agent backward compat)
             last_response: Optional[str] = None
+            single_agent = len(self.agents) == 1
 
             for turn in range(1, self.max_turns + 1):
                 if self._ended:
@@ -1427,6 +1431,25 @@ class StreamChatOrchestrator:
                 current_topic = self._drain_pending(current_topic)
                 if self._ended:
                     break
+
+                # Single-agent: auto-pause after first turn, wait for moderator /say or /resume
+                if single_agent and turn > 1 and not self._moderator_injection:
+                    self._paused = True
+                    if self._broadcaster:
+                        self._broadcaster.send_event({  # type: ignore[union-attr]
+                            "type": "status", "chat_id": self.chat_id,
+                            "state": "paused", "turn": len(self.turns),
+                            "max_turns": self.max_turns,
+                            "total_tokens": self.total_tokens,
+                        })
+                    while self._paused and not self._ended:
+                        time.sleep(0.3)
+                        current_topic = self._drain_pending(current_topic)
+                        # /say sets _moderator_injection — break auto-pause
+                        if self._moderator_injection:
+                            self._paused = False
+                    if self._ended:
+                        break
 
                 # Handle pause: spin until resumed
                 while self._paused and not self._ended:

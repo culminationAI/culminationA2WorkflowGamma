@@ -1886,11 +1886,18 @@ async function resurrectChat() {
   const n = parseInt(prompt('How many additional turns?', '10'), 10);
   if (!n || n <= 0) return;
   try {
-    await fetch(`/api/chats/${encodeURIComponent(activeChatId)}/resurrect`, {
+    const r = await fetch(`/api/chats/${encodeURIComponent(activeChatId)}/resurrect`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ additional_turns: n }),
     });
+    if (r.ok) {
+      const data = await r.json();
+      if (data.chat_id) {
+        await loadChatList();
+        selectChat(data.chat_id);
+      }
+    }
   } catch (e) {
     console.error('resurrectChat error:', e);
   }
@@ -2341,6 +2348,8 @@ function handleSSEvent(msg) {
   }
 
   else if (type === 'agent_joined') {
+    const chatId = msg.chat_id;
+    if (chatId !== activeChatId) return;  // ignore other chats
     // Dynamically add a new panel for the joined agent
     const agents = _chatCache[activeChatId] ? (_chatCache[activeChatId].agents || {}) : {};
     const nextKey = String(Object.keys(agents).length);
@@ -2450,10 +2459,27 @@ function sendCmdInput() {
     const synthTurn = { turn: 0, speaker: 'moderator', text: arg, timestamp: new Date().toISOString() };
     const agents = _chatCache[activeChatId] ? _chatCache[activeChatId].agents : null;
 
+    // Add to cache immediately (prevents loss on chat switch)
+    if (_chatCache[activeChatId]) {
+      _chatCache[activeChatId].turns = _chatCache[activeChatId].turns || [];
+      _chatCache[activeChatId].turns.push(synthTurn);
+    }
+
+    // ONE msgId for all panels — dedup relies on this being consistent
+    const msgId = 'mod-msg-' + Date.now();
+    window._lastModMsgId = msgId;
+
+    // Parse @mention for targeted display
+    const mentionMatch = arg.match(/^@(\S+)\s+([\s\S]*)/);
+    const targetAgent = mentionMatch ? mentionMatch[1] : null;
+
     if (isPanelMode()) {
-      // Show moderator message in all panels
-      document.querySelectorAll('.panel-messages').forEach(pm => {
-        const msgId = 'mod-msg-' + Date.now();
+      // Show moderator message in target panel only (or all panels if broadcast)
+      const panels = targetAgent
+        ? [findPanel(targetAgent, ' .panel-messages')].filter(Boolean)
+        : Array.from(document.querySelectorAll('.panel-messages'));
+
+      panels.forEach(pm => {
         const wrapper = document.createElement('div');
         wrapper.innerHTML = buildTurnHTML(synthTurn, agents);
         const modText = wrapper.querySelector('.turn-mod-text');
@@ -2465,12 +2491,10 @@ function sendCmdInput() {
         }
         while (wrapper.firstChild) pm.appendChild(wrapper.firstChild);
         pm.scrollTop = pm.scrollHeight;
-        window._lastModMsgId = msgId;
       });
     } else {
       const msgArea = document.getElementById('messages-container');
       if (msgArea) {
-        const msgId = 'mod-msg-' + Date.now();
         const wrapper = document.createElement('div');
         wrapper.innerHTML = buildTurnHTML(synthTurn, agents);
         const modText = wrapper.querySelector('.turn-mod-text');
@@ -2482,7 +2506,6 @@ function sendCmdInput() {
         }
         while (wrapper.firstChild) msgArea.appendChild(wrapper.firstChild);
         msgArea.scrollTop = msgArea.scrollHeight;
-        window._lastModMsgId = msgId;
       }
     }
 
