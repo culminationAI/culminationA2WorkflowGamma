@@ -2,24 +2,20 @@
 """
 infra/chat/chat_server.py — FastAPI server for the chat viewer + moderator UI.
 
-Architecture (v2 — Event Sourcing):
-  stream_chat.py --POST /api/events--> chat_server --SSE--> browser
-                                           |
-                                      Event Journal
-                                  (JSONL per chat in logs/)
-                                           |
-                             GET /api/chats/{id} = full replay
+Architecture (v3 — Direct Router, no subprocess):
+  chat_server calls `claude -p` directly via asyncio for each agent.
+  No stream_chat.py orchestrator subprocess.
 
-  Browser --WebSocket /ws/moderate--> command_queue --GET /api/commands--> stream_chat.py
+  Browser --WebSocket /ws/moderate--> command handling --> asyncio chat loop
+  asyncio chat loop --SSE--> browser
 
 Endpoints:
   GET  /                          — Serve chat viewer HTML
   GET  /api/chats                 — List all chat summaries
-  GET  /api/chats/{chat_id}       — Full chat state (journal → log file fallback)
-  POST /api/events                — Receive events from stream_chat.py
-  GET  /api/commands              — Drain command queue (polled by orchestrator)
+  GET  /api/chats/{chat_id}       — Full chat state (journal → live_chats fallback)
+  POST /api/events                — Receive external events (kept for compatibility)
   GET  /events/stream             — SSE stream with Last-Event-ID replay
-  WS   /ws/moderate               — Commands only (client → server)
+  WS   /ws/moderate               — Commands: /say, /pause, /resume, /end
 
 Run:
   python3 chat_server.py              # port 8877
@@ -30,14 +26,15 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import asyncio.subprocess as aiosubprocess
 import json
 import logging
 import os
-import subprocess
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Coroutine, List, Optional
 from uuid import uuid4
 
 import uvicorn
@@ -82,30 +79,28 @@ def _save_agents(agents: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Live-chat process tracking
-# ---------------------------------------------------------------------------
-
-# Maps chat_id → OS PID of the spawned stream_chat.py subprocess
-_chat_pids: dict[str, int] = {}
-
-# ---------------------------------------------------------------------------
 # Event Journal — single source of truth
 # ---------------------------------------------------------------------------
 _global_seq: int = 0
 _events: list[dict] = []  # Global ordered event list (in-memory, backed by JSONL)
 _sse_queues: list[asyncio.Queue] = []  # SSE subscriber queues
 
-# Commands from moderator UI → orchestrator (per-chat queues)
-_command_queues: dict[str, asyncio.Queue] = {}
-
-def _get_cmd_queue(chat_id: str) -> asyncio.Queue:
-    """Get or create a per-chat command queue."""
-    if chat_id not in _command_queues:
-        _command_queues[chat_id] = asyncio.Queue()
-    return _command_queues[chat_id]
-
 # Live chat summaries (for sidebar listing, derived from events)
 live_chats: dict[str, dict[str, Any]] = {}
+
+# Background asyncio tasks per chat
+_chat_tasks: dict[str, asyncio.Task] = {}
+
+
+def _create_chat_task(chat_id: str) -> asyncio.Task:
+    """Create a chat loop task with exception logging."""
+    task = asyncio.create_task(run_chat_loop(chat_id))
+    def _on_done(t: asyncio.Task) -> None:
+        exc = t.exception() if not t.cancelled() else None
+        if exc:
+            log.error("Chat loop %s crashed: %s", chat_id, exc, exc_info=exc)
+    task.add_done_callback(_on_done)
+    return task
 
 
 def _journal_path(chat_id: str) -> Path:
@@ -280,8 +275,6 @@ def _build_chat_from_events(chat_id: str) -> dict | None:
         elif etype == "status":
             if ev.get("state"):
                 chat["state"] = ev["state"]
-            if ev.get("total_tokens"):
-                pass  # total_tokens tracked via turns
             if ev.get("max_turns"):
                 chat["max_turns"] = ev["max_turns"]
             if ev.get("max_context"):
@@ -305,6 +298,26 @@ async def _notify_sse(event: dict) -> None:
             _sse_queues.remove(q)
         except ValueError:
             pass
+
+
+def _broadcast_event(event: dict) -> None:
+    """Synchronous wrapper: journal + notify SSE (fire-and-forget)."""
+    chat_id = event.get("chat_id", "")
+    ev_type = event.get("type", "")
+
+    # Ephemeral events: SSE only, no journal
+    ephemeral = {"stream_start", "stream_chunk", "stream_end", "msg_status",
+                 "tool_call", "agent_msg", "sync_status", "shared_update"}
+    if ev_type in ephemeral:
+        asyncio.get_event_loop().call_soon_threadsafe(
+            lambda: asyncio.ensure_future(_notify_sse(event))
+        )
+        return
+
+    # Journal + update live summary + notify SSE
+    seq = _append_event(event)
+    _update_live_chats(event)
+    asyncio.ensure_future(_notify_sse({**event, "seq": seq}))
 
 
 # ---------------------------------------------------------------------------
@@ -349,9 +362,249 @@ def _scan_logs() -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Capsule path helper
+# ---------------------------------------------------------------------------
+
+def _get_capsule_path(agent_name: str, workspace: str) -> Optional[str]:
+    """Find identity capsule for agent — capsule file first, then CLAUDE.md."""
+    ws = Path(workspace)
+    capsule = ws / ".claude" / f"capsule_{agent_name}.md"
+    if capsule.exists():
+        return str(capsule)
+    claude_md = ws / "CLAUDE.md"
+    if claude_md.exists():
+        return str(claude_md)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Direct agent invocation via `claude -p`
+# ---------------------------------------------------------------------------
+
+async def invoke_agent_async(agent: dict, prompt: str, chat_id: str) -> tuple[str, dict]:
+    """Call `claude -p` asynchronously, stream chunks via SSE. Returns (full_text, meta)."""
+    cmd = [
+        "claude", "-p",
+        "--verbose",
+        "--output-format", "stream-json",
+        "--permission-mode", agent.get("permission_mode", "bypassPermissions"),
+    ]
+    if agent.get("budget"):
+        cmd.extend(["--max-budget-usd", str(agent["budget"])])
+    if agent.get("capsule_path"):
+        cmd.extend(["--append-system-prompt", agent["capsule_path"]])
+    if agent.get("session_id"):
+        cmd.extend(["--resume", agent["session_id"]])
+
+    # Strip CLAUDECODE / CLAUDE_CODE_ENTRYPOINT to allow nested claude -p
+    clean_env = {k: v for k, v in os.environ.items()
+                 if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")}
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=agent.get("workspace"),
+        env=clean_env,
+    )
+
+    assert proc.stdin is not None
+    proc.stdin.write(prompt.encode())
+    await proc.stdin.drain()
+    proc.stdin.close()
+
+    # Use a list to accumulate text chunks — avoids linter confusion over str += str
+    chunks: list[str] = []
+    final_from_result: str = ""
+
+    # Broadcast stream start
+    await _notify_sse({"type": "stream_start", "chat_id": chat_id, "speaker": agent["name"]})
+
+    assert proc.stdout is not None
+    async for raw_line in proc.stdout:
+        line = raw_line.decode().strip()
+        if not line:
+            continue
+        try:
+            chunk = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        ctype: str = str(chunk.get("type", ""))
+        text: str = ""
+
+        if ctype == "assistant":
+            # Non-streaming format: full message in one shot
+            for block in chunk.get("message", {}).get("content", []):
+                if block.get("type") == "text":
+                    text = str(block.get("text", ""))
+        elif ctype == "content_block_delta":
+            delta = chunk.get("delta", {})
+            text = str(delta.get("text", ""))
+        elif ctype == "result":
+            # Final result chunk — capture session_id and fallback full text
+            sid = chunk.get("session_id")
+            if sid:
+                agent["session_id"] = sid
+            final_from_result = str(chunk.get("result", ""))
+            continue
+
+        if text:
+            chunks.append(text)
+            await _notify_sse({
+                "type": "stream_chunk",
+                "chat_id": chat_id,
+                "speaker": agent["name"],
+                "chunk": text,
+            })
+
+    await proc.wait()
+
+    # Log stderr if any (helps debug claude -p failures)
+    stderr_text = ""
+    _stderr = proc.stderr
+    if _stderr is not None:
+        stderr_text = (await _stderr.read()).decode(errors="replace")
+    if stderr_text:
+        log.warning("Agent %s stderr: %.500s", agent["name"], stderr_text)
+    if proc.returncode and proc.returncode != 0:
+        log.error("Agent %s exited with code %d", agent["name"], proc.returncode)
+
+    # Broadcast stream end
+    await _notify_sse({"type": "stream_end", "chat_id": chat_id, "speaker": agent["name"]})
+
+    # Prefer streamed chunks; fall back to result field if nothing was streamed
+    full_text: str = "".join(chunks) if chunks else final_from_result
+    return full_text, {"session_id": agent.get("session_id")}
+
+
+# ---------------------------------------------------------------------------
+# Background chat loop
+# ---------------------------------------------------------------------------
+
+async def run_chat_loop(chat_id: str) -> None:
+    """Background task: run rounds until convergence, max_rounds, or chat ended."""
+    chat = live_chats[chat_id]
+    max_rounds: int = int(chat.get("max_turns") or 20)
+    # Use a list to hold the counter so rebinding never confuses the linter
+    _rounds: List[int] = [0]
+
+    while _rounds[0] < max_rounds and not chat.get("ended"):
+        # Wait for pending messages to appear (or chat to end/pause)
+        while not chat.get("pending_messages") and not chat.get("ended"):
+            if chat.get("paused"):
+                await asyncio.sleep(0.5)
+                continue
+            await asyncio.sleep(0.3)
+
+        if chat.get("ended"):
+            break
+        if chat.get("paused"):
+            # Re-enter wait loop
+            continue
+
+        # Snapshot and clear pending messages atomically
+        messages: list[dict] = chat["pending_messages"][:]
+        chat["pending_messages"] = []
+
+        # Build per-agent invocations: each agent sees only messages from OTHERS
+        # Respect _target field for directed messages
+        agent_tasks: list[tuple[dict, Any]] = []
+        for agent in chat.get("agents_list", []):
+            others = [
+                m for m in messages
+                if m["speaker"] != agent["name"]
+                and (not m.get("_target") or m["_target"] == agent["name"])
+            ]
+            if not others:
+                continue
+            prompt = "\n\n".join(f"[{m['speaker']}]: {m['text']}" for m in others)
+            agent_tasks.append((agent, invoke_agent_async(agent, prompt, chat_id)))
+
+        if not agent_tasks:
+            # No agent has anything to respond to — wait for more input
+            continue
+
+        _rounds[0] = _rounds[0] + 1
+        current_round = _rounds[0]
+        seq = _append_event({
+            "type": "status",
+            "chat_id": chat_id,
+            "state": "running",
+            "turn": current_round,
+            "max_turns": max_rounds,
+        })
+        _update_live_chats({"type": "status", "chat_id": chat_id, "state": "running"})
+        await _notify_sse({"type": "status", "chat_id": chat_id, "state": "running",
+                           "turn": current_round, "max_turns": max_rounds, "seq": seq})
+
+        # Run all agent coroutines in parallel
+        results = await asyncio.gather(
+            *[t[1] for t in agent_tasks],
+            return_exceptions=True,
+        )
+
+        any_response = False
+        for (agent, _), result in zip(agent_tasks, results):
+            if isinstance(result, Exception):
+                log.error("Agent %s error in chat %s: %s", agent["name"], chat_id, result)
+                continue
+            text, _meta = result
+            if not text or not text.strip():
+                continue
+
+            any_response = True
+            turn_num = len(chat.setdefault("turns", [])) + 1
+            turn_record: dict[str, Any] = {
+                "turn": turn_num,
+                "speaker": agent["name"],
+                "text": text.strip(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "input_tokens": 0,
+                "output_tokens": 0,
+            }
+            chat["turns"].append(turn_record)
+            # Queue this agent's response for others to receive next round
+            chat["pending_messages"].append({
+                "speaker": agent["name"],
+                "text": text.strip(),
+            })
+
+            seq = _append_event({
+                "type": "turn",
+                "chat_id": chat_id,
+                "turn_data": turn_record,
+                "total_tokens": 0,
+            })
+            _update_live_chats({"type": "turn", "chat_id": chat_id,
+                                 "turn_data": turn_record, "total_tokens": 0})
+            await _notify_sse({
+                "type": "turn",
+                "chat_id": chat_id,
+                "turn_data": turn_record,
+                "total_tokens": 0,
+                "seq": seq,
+            })
+
+        if not any_response:
+            log.info("Chat %s: no agent responded — convergence after %d rounds", chat_id, _rounds[0])
+            break
+
+    # End the chat
+    if not chat.get("ended"):
+        chat["ended"] = True
+        chat["state"] = "ended"
+        seq = _append_event({"type": "chat_ended", "chat_id": chat_id})
+        _update_live_chats({"type": "chat_ended", "chat_id": chat_id})
+        await _notify_sse({"type": "chat_ended", "chat_id": chat_id, "seq": seq})
+        log.info("Chat %s ended after %d rounds", chat_id, _rounds[0])
+
+
+# ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
-app = FastAPI(title="Chat Server", version="2.0.0")
+app = FastAPI(title="Chat Server", version="3.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -388,20 +641,10 @@ async def list_chats() -> JSONResponse:
 
 @app.get("/api/chats/{chat_id}")
 async def get_chat(chat_id: str) -> JSONResponse:
-    """Return full chat state — from event journal (live) or log file (completed)."""
+    """Return full chat state — from live_chats (live) or event journal or log file (completed)."""
     safe_id = Path(chat_id).name
 
-    # First: try event journal (for live/recent chats)
-    chat = _build_chat_from_events(safe_id)
-    if chat:
-        # Merge live_chats data (max_turns may have been set before subprocess started)
-        if safe_id in live_chats:
-            lc = live_chats[safe_id]
-            if not chat.get("max_turns") and lc.get("max_turns"):
-                chat["max_turns"] = lc["max_turns"]
-        return JSONResponse(content=chat)
-
-    # Second: try live_chats (for empty/waiting chats with no events yet)
+    # First: try live_chats for active/recent chats
     if safe_id in live_chats:
         lc = live_chats[safe_id]
         return JSONResponse(content={
@@ -410,14 +653,19 @@ async def get_chat(chat_id: str) -> JSONResponse:
             "agents": lc.get("agents", {}),
             "turns": lc.get("turns", []),
             "facts": [],
-            "started_at": lc.get("started_at", ""),
-            "ended_at": None,
+            "started_at": lc.get("started_at", str(lc.get("_last_event_ts", ""))),
+            "ended_at": lc.get("ended_at"),
             "total_input_tokens": 0,
             "total_output_tokens": 0,
-            "state": lc.get("state", "waiting"),
-            "max_turns": lc.get("max_turns", 5),
-            "_live": True,
+            "state": "ended" if lc.get("ended") else ("paused" if lc.get("paused") else lc.get("state", "active")),
+            "max_turns": lc.get("max_turns", 20),
+            "_live": lc.get("_live", True),
         })
+
+    # Second: try event journal (for chats evicted from live_chats)
+    chat = _build_chat_from_events(safe_id)
+    if chat:
+        return JSONResponse(content=chat)
 
     # Third: try log files (for completed chats)
     candidates = [
@@ -441,7 +689,7 @@ async def get_chat(chat_id: str) -> JSONResponse:
 
 @app.post("/api/events")
 async def post_event(request: Request) -> JSONResponse:
-    """Receive event from stream_chat.py → journal + SSE broadcast."""
+    """Receive event from external sources → journal + SSE broadcast (compatibility endpoint)."""
     try:
         body = await request.json()
     except Exception:
@@ -450,78 +698,38 @@ async def post_event(request: Request) -> JSONResponse:
     ev_type = body.get("type", "")
 
     # Ephemeral events: broadcast only, don't journal
-    if ev_type in ("stream_start", "stream_chunk", "msg_status", "tool_call", "agent_msg", "sync_status", "shared_update"):
+    if ev_type in ("stream_start", "stream_chunk", "stream_end", "msg_status",
+                   "tool_call", "agent_msg", "sync_status", "shared_update"):
         await _notify_sse(body)
         return JSONResponse(content={"ok": True, "seq": 0})
-
-    # New chat started: drain stale commands from previous session
-    if ev_type == "chat_started":
-        cid = body.get("chat_id", "")
-        if cid:
-            q = _get_cmd_queue(cid)
-            while not q.empty():
-                try:
-                    q.get_nowait()
-                except asyncio.QueueEmpty:
-                    break
 
     # All other events: journal + broadcast
     seq = _append_event(body)
     _update_live_chats(body)
 
-    # Notify all SSE subscribers
     event_with_seq = {**body, "seq": seq}
     await _notify_sse(event_with_seq)
 
     return JSONResponse(content={"ok": True, "seq": seq})
 
 
-@app.get("/api/commands")
-async def get_commands(chat_id: str = "") -> JSONResponse:
-    """Return pending moderator commands from the per-chat queue (drains it)."""
-    if not chat_id:
-        return JSONResponse(content=[])
-    q = _get_cmd_queue(chat_id)
-    commands: list[dict] = []
-    while not q.empty():
-        try:
-            commands.append(q.get_nowait())
-        except asyncio.QueueEmpty:
-            break
-    return JSONResponse(content=commands)
-
-
 @app.post("/api/chats/{chat_id}/end")
 async def force_end_chat(chat_id: str) -> JSONResponse:
-    """Force-end a stale/zombie chat from the UI (server-side synthesized event)."""
+    """Force-end a live chat from the UI."""
     safe_id = Path(chat_id).name
     if safe_id not in live_chats:
         return JSONResponse(content={"error": "Chat not found"}, status_code=404)
     if not live_chats[safe_id].get("_live"):
         return JSONResponse(content={"error": "Chat already ended"}, status_code=400)
 
+    # Signal the background task to exit
+    live_chats[safe_id]["ended"] = True
+    live_chats[safe_id]["paused"] = False
+
     event = {"type": "chat_ended", "chat_id": safe_id}
     seq = _append_event(event)
     _update_live_chats(event)
     await _notify_sse({**event, "seq": seq})
-
-    # Drain stale commands + cleanup queue
-    q = _get_cmd_queue(safe_id)
-    while not q.empty():
-        try:
-            q.get_nowait()
-        except asyncio.QueueEmpty:
-            break
-    _command_queues.pop(safe_id, None)
-
-    # Kill subprocess if running
-    if safe_id in _chat_pids:
-        pid = _chat_pids.pop(safe_id)
-        try:
-            os.kill(pid, 9)
-            log.info("Killed subprocess pid=%d for chat %s", pid, safe_id)
-        except OSError:
-            pass
 
     log.info("Force-ended chat: %s", safe_id)
     return JSONResponse(content={"ok": True, "seq": seq})
@@ -592,12 +800,11 @@ async def delete_agent(name: str) -> JSONResponse:
 @app.post("/api/chats")
 async def create_chat(request: Request) -> JSONResponse:
     """
-    Create and (optionally) spawn a new chat session.
+    Create a new chat session.
 
     Body: {topic, agents?: [names], max_turns?, budget?}
-    If agents are provided: writes a temp config to /tmp, spawns stream_chat.py.
-    If agents list is empty or omitted: creates an empty chat (no subprocess).
-    Agents can be added later via POST /api/chats/{chat_id}/add-agent.
+    Chat starts immediately as 'active' with empty agents_list.
+    Agents can be added via POST /api/chats/{chat_id}/add-agent.
     """
     try:
         body = await request.json()
@@ -606,79 +813,64 @@ async def create_chat(request: Request) -> JSONResponse:
 
     topic = body.get("topic", "").strip()
     agent_names = body.get("agents", [])
-    max_turns = int(body.get("max_turns", 5))
+    max_turns = int(body.get("max_turns", 20))
     cli_budget = float(body.get("budget", 5.0))
 
     if not topic:
         return JSONResponse(content={"error": "topic is required"}, status_code=400)
 
-    # Lookup each agent name in the registry
-    registry = _load_agents()
-    registry_map = {a["name"]: a for a in registry}
-    agents_config = []
-    for name in agent_names:
-        if name not in registry_map:
-            return JSONResponse(
-                content={"error": f"Agent '{name}' not registered"},
-                status_code=400,
-            )
-        reg = registry_map[name]
-        agents_config.append({
-            "name": name,
-            "workspace": reg["workspace"],
-            "role": reg.get("role", ""),
-            "budget": cli_budget,
-            "permission_mode": reg.get("permission_mode", "bypassPermissions"),
-        })
-
-    # Generate a unique chat_id — 8-char hex suffix via modulo (avoids string slice)
+    # Generate unique chat_id
     _uid_suffix = f"{uuid4().int % 0x1_0000_0000:08x}"
     chat_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + _uid_suffix
-
-    # Always insert into live_chats so the chat appears in the sidebar immediately
     now_iso = datetime.now(timezone.utc).isoformat()
+
     live_chats[chat_id] = {
         "chat_id": chat_id,
         "topic": topic,
+        "state": "active",
         "agents": {},
+        "agents_list": [],
         "turns": [],
+        "pending_messages": [],
+        "paused": False,
+        "ended": False,
+        "max_turns": max_turns,
+        "turn_count": 0,
+        "total_tokens": 0,
+        "facts_count": 0,
         "_live": True,
-        "state": "waiting",
         "started_at": now_iso,
         "_last_event_ts": datetime.now(timezone.utc),
-        "max_turns": max_turns,
     }
 
-    if agents_config:
-        config = {
-            "chat_id": chat_id,
-            "topic": topic,
-            "agents": agents_config,
-            "project_cwd": str(Path(__file__).parent.parent.parent),  # workspace root
-            "project_name": Path(__file__).parent.parent.parent.name,
-            "max_turns": max_turns,
-            "max_tokens": 0,
-            "ws_port": 8877,
-            "start_paused": True,
-        }
+    # If agent names were provided upfront, register them
+    if agent_names:
+        registry = _load_agents()
+        registry_map = {a["name"]: a for a in registry}
+        for name in agent_names:
+            if name not in registry_map:
+                return JSONResponse(
+                    content={"error": f"Agent '{name}' not registered"},
+                    status_code=400,
+                )
+            reg = registry_map[name]
+            agent_config = {
+                "name": name,
+                "workspace": reg["workspace"],
+                "session_id": None,
+                "capsule_path": _get_capsule_path(name, reg["workspace"]),
+                "budget": cli_budget,
+                "permission_mode": reg.get("permission_mode", "bypassPermissions"),
+            }
+            live_chats[chat_id]["agents_list"].append(agent_config)
+            agents_dict = live_chats[chat_id]["agents"]
+            agents_dict[str(len(agents_dict))] = {"name": name, "color": "#569cd6"}
 
-        config_path = f"/tmp/chat_config_{chat_id}.json"
-        Path(config_path).write_text(json.dumps(config, indent=2), encoding="utf-8")
-
-        stream_chat_path = str(BASE_DIR / "stream_chat.py")
-        proc = subprocess.Popen(
-            [sys.executable, stream_chat_path, "--config", config_path],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        _chat_pids[chat_id] = proc.pid
-        live_chats[chat_id]["state"] = "paused"
-        log.info("Spawned chat %s (pid=%d, agents=%s)", chat_id, proc.pid, agent_names)
-        return JSONResponse(content={"ok": True, "chat_id": chat_id, "pid": proc.pid}, status_code=201)
+        log.info("Created chat %s with agents=%s", chat_id, agent_names)
     else:
-        # Empty chat — no subprocess, user will add agents later
         log.info("Created empty chat %s (no agents yet)", chat_id)
-        return JSONResponse(content={"ok": True, "chat_id": chat_id, "pid": None}, status_code=201)
+
+    return JSONResponse(content={"ok": True, "chat_id": chat_id, "pid": None}, status_code=201)
 
 
 @app.post("/api/chats/{chat_id}/add-agent")
@@ -686,11 +878,8 @@ async def add_agent_to_chat(chat_id: str, request: Request) -> JSONResponse:
     """
     Add an agent to an existing chat by name.
 
-    Body: {name, max_turns?, budget?}
-    If the chat has no running subprocess yet, spawning happens here
-    using a fresh config that includes all currently registered agents plus the new one.
-    If a subprocess is already running, only the in-memory sidebar entry is updated
-    (the live orchestrator cannot hot-add agents mid-session).
+    Body: {name, budget?}
+    Starts the background chat loop if not already running.
     """
     try:
         body = await request.json()
@@ -705,8 +894,16 @@ async def add_agent_to_chat(chat_id: str, request: Request) -> JSONResponse:
     if not agent_name:
         return JSONResponse(content={"error": "name is required"}, status_code=400)
 
-    max_turns = int(body.get("max_turns", 5))
-    cli_budget = float(body.get("budget", 5.0))
+    chat = live_chats[safe_id]
+    agents_list: list[dict] = chat.setdefault("agents_list", [])
+
+    # Enforce 4-agent maximum
+    if len(agents_list) >= 4:
+        return JSONResponse(content={"error": "Maximum 4 agents per chat"}, status_code=400)
+
+    # Check if agent already in chat
+    if any(a["name"] == agent_name for a in agents_list):
+        return JSONResponse(content={"error": f"Agent '{agent_name}' already in chat"}, status_code=400)
 
     # Validate agent is in the registry
     registry = _load_agents()
@@ -718,148 +915,102 @@ async def add_agent_to_chat(chat_id: str, request: Request) -> JSONResponse:
         )
 
     reg = registry_map[agent_name]
-    new_agent_cfg = {
+    cli_budget = float(body.get("budget", reg.get("default_budget", 5.0)))
+
+    agent_config = {
         "name": agent_name,
         "workspace": reg["workspace"],
-        "role": reg.get("role", ""),
+        "session_id": None,
+        "capsule_path": _get_capsule_path(agent_name, reg["workspace"]),
         "budget": cli_budget,
         "permission_mode": reg.get("permission_mode", "bypassPermissions"),
     }
+    agents_list.append(agent_config)
 
-    # Update in-memory sidebar entry
-    chat_info = live_chats[safe_id]
-    agents_dict = chat_info.setdefault("agents", {})
-    next_key = str(len(agents_dict))
-    agents_dict[next_key] = {"name": agent_name}
-    chat_info["_last_event_ts"] = datetime.now(timezone.utc)
+    # Keep UI agents dict in sync
+    agents_dict = chat.setdefault("agents", {})
+    agents_dict[str(len(agents_dict))] = {"name": agent_name, "color": "#569cd6"}
+    chat["_last_event_ts"] = datetime.now(timezone.utc)
 
-    # If no subprocess is running yet, spawn one now
-    if safe_id not in _chat_pids:
-        # Collect all agents already in live_chats plus the new one
-        existing_agents = [
-            info for info in agents_dict.values()
-            if info.get("name") and info["name"] != agent_name
-        ]
-        agents_config = [
-            {
-                "name": a["name"],
-                "workspace": registry_map[a["name"]]["workspace"],
-                "role": registry_map[a["name"]].get("role", ""),
-                "budget": cli_budget,
-                "permission_mode": registry_map[a["name"]].get("permission_mode", "bypassPermissions"),
-            }
-            for a in existing_agents
-            if a["name"] in registry_map
-        ]
-        agents_config.append(new_agent_cfg)
+    # Broadcast agent_joined event
+    seq = _append_event({"type": "agent_joined", "chat_id": safe_id, "agent_name": agent_name})
+    _update_live_chats({"type": "agent_joined", "chat_id": safe_id, "agent_name": agent_name})
+    await _notify_sse({"type": "agent_joined", "chat_id": safe_id, "agent_name": agent_name, "seq": seq})
 
-        topic = chat_info.get("topic", "")
-        effective_max_turns = chat_info.get("max_turns", max_turns)
-        config = {
-            "chat_id": safe_id,
-            "topic": topic,
-            "agents": agents_config,
-            "project_cwd": str(Path(__file__).parent.parent.parent),
-            "project_name": Path(__file__).parent.parent.parent.name,
-            "max_turns": effective_max_turns,
-            "max_tokens": 0,
-            "ws_port": 8877,
-            "start_paused": True,
-        }
+    # Start chat loop if not already running
+    if safe_id not in _chat_tasks or _chat_tasks[safe_id].done():
+        _chat_tasks[safe_id] = _create_chat_task(safe_id)
+        log.info("Started chat loop for %s (agents=%s)", safe_id,
+                 [a["name"] for a in agents_list])
 
-        config_path = f"/tmp/chat_config_{safe_id}.json"
-        Path(config_path).write_text(json.dumps(config, indent=2), encoding="utf-8")
-
-        stream_chat_path = str(BASE_DIR / "stream_chat.py")
-        proc = subprocess.Popen(
-            [sys.executable, stream_chat_path, "--config", config_path],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        _chat_pids[safe_id] = proc.pid
-        chat_info["state"] = "paused"
-        agent_names_list = [a["name"] for a in agents_config]
-        log.info(
-            "Spawned chat %s (pid=%d, agents=%s) after add-agent",
-            safe_id, proc.pid, agent_names_list,
-        )
-        return JSONResponse(content={"ok": True, "chat_id": safe_id, "pid": proc.pid, "spawned": True})
-
-    log.info("Added agent %s to live chat %s (no respawn — subprocess running)", agent_name, safe_id)
-    return JSONResponse(content={"ok": True, "chat_id": safe_id, "pid": _chat_pids[safe_id], "spawned": False})
+    log.info("Added agent %s to chat %s", agent_name, safe_id)
+    return JSONResponse(content={"ok": True, "chat_id": safe_id})
 
 
 @app.delete("/api/chats/{chat_id}/agents/{agent_name}")
 async def remove_agent_from_chat(chat_id: str, agent_name: str) -> JSONResponse:
-    """Remove an agent from a waiting chat (no running subprocess)."""
-    import signal
-
+    """Remove an agent from a chat (only when no active round is running)."""
     safe_id = Path(chat_id).name
     if safe_id not in live_chats:
         return JSONResponse(content={"error": "Chat not found"}, status_code=404)
 
     chat_info = live_chats[safe_id]
 
-    # Cannot hot-remove from running subprocess
-    if safe_id in _chat_pids:
+    # Remove from agents_list
+    agents_list: list[dict] = chat_info.get("agents_list", [])
+    original_len = len(agents_list)
+    chat_info["agents_list"] = [a for a in agents_list if a["name"] != agent_name]
+
+    if len(chat_info["agents_list"]) == original_len:
         return JSONResponse(
-            content={"error": "Stop the chat first to remove agents"},
-            status_code=409,
+            content={"error": f"Agent '{agent_name}' not in this chat"},
+            status_code=404,
         )
 
+    # Keep UI agents dict in sync
     agents_dict = chat_info.get("agents", {})
     key_to_remove = None
     for key, agent in agents_dict.items():
         if agent.get("name") == agent_name:
             key_to_remove = key
             break
-
-    if key_to_remove is None:
-        return JSONResponse(
-            content={"error": f"Agent '{agent_name}' not in this chat"},
-            status_code=404,
-        )
-
-    del agents_dict[key_to_remove]
-
-    # Re-key remaining agents to sequential numeric keys
-    remaining = list(agents_dict.values())
-    agents_dict.clear()
-    for i, a in enumerate(remaining):
-        agents_dict[str(i)] = a
+    if key_to_remove is not None:
+        del agents_dict[key_to_remove]
+        remaining = list(agents_dict.values())
+        agents_dict.clear()
+        for i, a in enumerate(remaining):
+            agents_dict[str(i)] = a
 
     chat_info["_last_event_ts"] = datetime.now(timezone.utc)
     log.info("Removed agent %s from chat %s", agent_name, safe_id)
     return JSONResponse(content={"ok": True, "chat_id": safe_id})
 
 
+@app.get("/api/commands")
+async def get_commands_stub(chat_id: str = "") -> JSONResponse:
+    """Stub for legacy polling — always returns empty."""
+    return JSONResponse(content=[])
+
+
 @app.delete("/api/chats/{chat_id}")
 async def delete_chat(chat_id: str) -> JSONResponse:
-    """
-    Delete a chat: kill subprocess (if live), remove from live_chats, delete log files.
-    """
-    import signal
-
+    """Delete a chat: cancel background task, remove from live_chats, delete log files."""
     safe_id = Path(chat_id).name
 
-    # Kill the subprocess if tracked
-    if safe_id in _chat_pids:
-        pid = _chat_pids.pop(safe_id)
-        try:
-            os.kill(pid, signal.SIGTERM)
-            log.info("Sent SIGTERM to chat %s (pid=%d)", safe_id, pid)
-        except (ProcessLookupError, OSError) as exc:
-            log.debug("Could not kill pid %d: %s", pid, exc)
+    # Cancel background task if running
+    if safe_id in _chat_tasks and not _chat_tasks[safe_id].done():
+        _chat_tasks[safe_id].cancel()
+        _chat_tasks.pop(safe_id, None)
 
-    # Synthesize a chat_ended event if still live in memory
+    # Signal ended + synthesize event if still live
     if safe_id in live_chats and live_chats[safe_id].get("_live"):
+        live_chats[safe_id]["ended"] = True
         event = {"type": "chat_ended", "chat_id": safe_id}
         seq = _append_event(event)
         _update_live_chats(event)
         await _notify_sse({**event, "seq": seq})
         log.info("Synthesized chat_ended for deleted chat: %s", safe_id)
 
-    # Remove from live_chats
     live_chats.pop(safe_id, None)
 
     # Delete log file(s) for this chat
@@ -869,7 +1020,6 @@ async def delete_chat(chat_id: str) -> JSONResponse:
     for f in LOGS_DIR.glob(f"stream_{safe_id}*.json"):
         f.unlink(missing_ok=True)
 
-    # Delete any journal subdirectory files
     journals_dir = BASE_DIR / "journals"
     if journals_dir.exists():
         for f in journals_dir.glob(f"{safe_id}*.jsonl"):
@@ -879,94 +1029,12 @@ async def delete_chat(chat_id: str) -> JSONResponse:
     return JSONResponse(content={"ok": True})
 
 
-@app.post("/api/chats/{chat_id}/resurrect")
-async def resurrect_chat(chat_id: str, request: Request) -> JSONResponse:
-    """
-    Resurrect an ended chat with additional turns.
-
-    Reads the original log, builds a new config with resume_from, spawns a new session.
-    Body: {additional_turns?}
-    """
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-
-    safe_id = Path(chat_id).name
-    additional_turns = int(body.get("additional_turns", 10))
-
-    # Locate the original log file
-    log_files = list(LOGS_DIR.glob(f"stream_*{safe_id}*.json"))
-    if not log_files:
-        # Also try exact match
-        exact = LOGS_DIR / f"stream_{safe_id}.json"
-        if exact.exists():
-            log_files = [exact]
-
-    if not log_files:
-        return JSONResponse(content={"error": "Log file not found for this chat"}, status_code=404)
-
-    log_path = log_files[0]
-    try:
-        log_data = json.loads(log_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        return JSONResponse(content={"error": f"Could not parse log: {exc}"}, status_code=500)
-
-    # Reconstruct agents config from the log
-    agents_config = []
-    for _key, agent_info in log_data.get("agents", {}).items():
-        agents_config.append({
-            "name": agent_info.get("name", ""),
-            "workspace": agent_info.get("workspace", ""),
-            "role": agent_info.get("role", ""),
-            "budget": 5.0,
-        })
-
-    if not agents_config:
-        return JSONResponse(content={"error": "No agents found in log"}, status_code=400)
-
-    new_chat_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + f"{uuid4().int % 0x1_0000_0000:08x}"
-    old_max_turns = log_data.get("max_turns", len(log_data.get("turns", [])))
-
-    config = {
-        "chat_id": new_chat_id,
-        "topic": log_data.get("topic", ""),
-        "agents": agents_config,
-        "project_cwd": str(Path(__file__).parent.parent.parent),
-        "project_name": log_data.get("project", Path(__file__).parent.parent.parent.name),
-        "max_turns": old_max_turns + additional_turns,
-        "max_tokens": 0,
-        "ws_port": 8877,
-        "start_paused": True,
-        "resume_from": str(log_path),
-    }
-
-    config_path = f"/tmp/chat_config_{new_chat_id}.json"
-    Path(config_path).write_text(json.dumps(config, indent=2), encoding="utf-8")
-
-    stream_chat_path = str(BASE_DIR / "stream_chat.py")
-    proc = subprocess.Popen(
-        [sys.executable, stream_chat_path, "--config", config_path],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-    _chat_pids[new_chat_id] = proc.pid
-    log.info(
-        "Resurrected chat %s → %s (pid=%d, +%d turns)",
-        safe_id, new_chat_id, proc.pid, additional_turns,
-    )
-
-    return JSONResponse(content={"ok": True, "chat_id": new_chat_id, "pid": proc.pid})
-
-
 @app.post("/api/chats/{chat_id}/add-turns")
 async def add_turns(chat_id: str, request: Request) -> JSONResponse:
     """
     Extend the turn limit for a live chat.
 
     Body: {count?}  (default 5)
-    Sends a /turns +N command to the orchestrator via the command queue.
     """
     try:
         body = await request.json()
@@ -976,14 +1044,9 @@ async def add_turns(chat_id: str, request: Request) -> JSONResponse:
     count = int(body.get("count", 5))
     safe_id = Path(chat_id).name
 
-    # Always update live_chats so the UI reflects the change immediately
     if safe_id in live_chats:
         old_max = live_chats[safe_id].get("max_turns", 0)
         live_chats[safe_id]["max_turns"] = old_max + count
-
-    # If subprocess is running, also forward to orchestrator
-    if safe_id in _chat_pids:
-        await _get_cmd_queue(safe_id).put({"cmd": "/turns", "arg": f"+{count}"})
 
     new_max = live_chats.get(safe_id, {}).get("max_turns", count)
     log.info("Added %d turns for chat %s → max_turns=%d", count, safe_id, new_max)
@@ -1021,7 +1084,6 @@ async def sse_stream(request: Request):
     Sends periodic pings to keep connection alive.
     Browser's EventSource auto-reconnects and sends Last-Event-ID on reconnect.
     """
-    # Support both header (standard) and query param (fallback)
     last_id = int(
         request.headers.get(
             "Last-Event-ID",
@@ -1067,14 +1129,13 @@ async def sse_stream(request: Request):
 
 
 # ---------------------------------------------------------------------------
-# WebSocket — commands only (client → server)
+# WebSocket — moderator commands (client → server → chat loop)
 # ---------------------------------------------------------------------------
 @app.websocket("/ws/moderate")
 async def ws_moderate(websocket: WebSocket) -> None:
     """
-    WebSocket for sending commands from browser to orchestrator.
-    Only handles: {"type": "command", "cmd": "/pause"|"/resume"|"/end"|..., "arg": "..."}
-    Responds with ACK.
+    WebSocket for sending commands from browser to the chat loop.
+    Handles: /say, /pause, /resume, /end
     Events are delivered via SSE, not WebSocket.
     """
     await websocket.accept()
@@ -1096,18 +1157,86 @@ async def ws_moderate(websocket: WebSocket) -> None:
             cmd = msg.get("cmd", "").strip()
             arg = msg.get("arg", "").strip()
             chat_id = msg.get("chat_id", "").strip()
-            if not cmd:
+            if not cmd or not chat_id:
                 continue
 
-            log.info("Moderator command [%s]: %s %r", chat_id or "?", cmd, arg)
-            if chat_id:
-                await _get_cmd_queue(chat_id).put({"cmd": cmd, "arg": arg})
-            else:
-                # Fallback: put into all active chat queues
-                for cid in list(_chat_pids.keys()):
-                    await _get_cmd_queue(cid).put({"cmd": cmd, "arg": arg})
+            safe_chat_id = Path(chat_id).name
+            log.info("Moderator command [%s]: %s %r", safe_chat_id, cmd, arg)
 
-            # Acknowledge back
+            if safe_chat_id not in live_chats:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "cmd": cmd,
+                    "error": "Chat not found",
+                }))
+                continue
+
+            chat = live_chats[safe_chat_id]
+
+            if cmd == "/say":
+                # Parse optional @mention for targeted delivery
+                target: Optional[str] = None
+                text = arg
+                m_match = re.match(r'^@(\S+)\s+([\s\S]*)', arg)
+                if m_match:
+                    target = m_match.group(1)
+                    text = m_match.group(2).strip()
+
+                # Record moderator turn
+                turn_record: dict[str, Any] = {
+                    "turn": len(chat.get("turns", [])) + 1,
+                    "speaker": "moderator",
+                    "text": arg,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                chat.setdefault("turns", []).append(turn_record)
+                seq = _append_event({
+                    "type": "turn",
+                    "chat_id": safe_chat_id,
+                    "turn_data": turn_record,
+                    "total_tokens": 0,
+                })
+                await _notify_sse({
+                    "type": "turn",
+                    "chat_id": safe_chat_id,
+                    "turn_data": turn_record,
+                    "total_tokens": 0,
+                    "seq": seq,
+                })
+
+                # Add to pending messages for the chat loop to pick up
+                pending_msg: dict[str, Any] = {"speaker": "moderator", "text": text}
+                if target:
+                    pending_msg["_target"] = target
+                chat.setdefault("pending_messages", []).append(pending_msg)
+
+                # If chat loop isn't running, start it
+                if safe_chat_id not in _chat_tasks or _chat_tasks[safe_chat_id].done():
+                    if chat.get("agents_list"):
+                        _chat_tasks[safe_chat_id] = _create_chat_task(safe_chat_id)
+
+            elif cmd == "/pause":
+                chat["paused"] = True
+                seq = _append_event({"type": "status", "chat_id": safe_chat_id, "state": "paused"})
+                _update_live_chats({"type": "status", "chat_id": safe_chat_id, "state": "paused"})
+                await _notify_sse({"type": "status", "chat_id": safe_chat_id, "state": "paused", "seq": seq})
+
+            elif cmd == "/resume":
+                chat["paused"] = False
+                seq = _append_event({"type": "status", "chat_id": safe_chat_id, "state": "running"})
+                _update_live_chats({"type": "status", "chat_id": safe_chat_id, "state": "running"})
+                await _notify_sse({"type": "status", "chat_id": safe_chat_id, "state": "running", "seq": seq})
+
+            elif cmd == "/end":
+                chat["ended"] = True
+                chat["paused"] = False
+                chat["state"] = "ended"
+                # The run_chat_loop will detect chat["ended"] and exit cleanly
+
+            else:
+                log.warning("Unknown command: %s", cmd)
+
+            # Acknowledge
             await websocket.send_text(json.dumps({
                 "type": "ack",
                 "cmd": cmd,
@@ -1147,7 +1276,6 @@ async def _watch_logs_dir(poll_interval: float = 1.5) -> None:
                     if seen.get(path.name) != mtime:
                         chat_id = path.stem.removeprefix("stream_")
                         log.debug("Log updated: %s", path.name)
-                        # Notify via SSE (not broadcast — that's gone)
                         await _notify_sse({
                             "type": "log_updated",
                             "chat_id": chat_id,
@@ -1170,7 +1298,7 @@ async def startup_event() -> None:
     _load_journals()
     asyncio.create_task(_watch_logs_dir())
     log.info(
-        "Chat server v2 started. Logs: %s | Templates: %s",
+        "Chat server v3 started (direct router). Logs: %s | Templates: %s",
         LOGS_DIR, TEMPLATES_DIR,
     )
 

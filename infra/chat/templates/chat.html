@@ -943,7 +943,7 @@ body {
                   oninput="autoResizeInput(this)"></textarea>
         <button class="cmd-btn primary" id="btn-send" onclick="sendCmdInput()" disabled>Send</button>
         <button class="cmd-btn" id="btn-pause" onclick="sendCmd('/pause','')" disabled title="Pause">&#9646;&#9646;</button>
-        <button class="cmd-btn primary" id="btn-resume" onclick="sendCmd('/resume','')" disabled title="Start agents" style="display:none">&#9654; Start</button>
+        <button class="cmd-btn primary" id="btn-resume" onclick="sendCmd('/resume','')" disabled title="Resume agents" style="display:none">&#9654; Resume</button>
         <button class="cmd-btn" id="btn-step" onclick="toggleStepMode()" disabled title="Step/Live mode">Step</button>
         <button class="cmd-btn" id="btn-moderator" onclick="toggleModeratorMode()" disabled title="Moderator mode" style="opacity:0.5">MOD</button>
         <button class="cmd-btn danger" id="btn-end" onclick="endChat()" disabled title="End">&#9632;</button>
@@ -985,7 +985,7 @@ let liveChats     = new Set();
 
 // Per-chat liveStatus map: each chat has its own state object
 const _defaultLS = () => ({
-  state: 'idle', turn: 0, max_turns: 0, total_tokens: 0,
+  state: 'active', turn: 0, max_turns: 0, total_tokens: 0,
   context_agents: {},
   context_a: 0, context_b: 0, max_context: 200000,
   permission_mode: 'bypassPermissions',
@@ -1341,7 +1341,7 @@ function buildAgentBadge(name, slot, ctxUsed, ctxMax, isLive) {
   const pct = ctxMax > 0 ? Math.round((ctxUsed / ctxMax) * 100) : 0;
   const fillClass = pct > 80 ? 'crit' : pct > 60 ? 'warn' : '';
   const curPerm = liveStatus.permission_mode || 'bypassPermissions';
-  const hasSubprocess = isLive && (liveStatus.state || '') !== 'waiting';
+  const hasSubprocess = isLive;
 
   const permItems = PERM_MODES.map(mode => {
     const isActive = mode === curPerm;
@@ -1471,8 +1471,7 @@ function updateHeaderAgents() {
 
   if (isNAgentKeys) {
     // N-agent mode: simple colored badges (no heavy dropdown)
-    const chatState = liveStatus.state || '';
-    const hasSubprocess = isLive && chatState !== 'waiting';
+    const hasSubprocess = isLive;
 
     for (const [key, agent] of Object.entries(agents)) {
       const idx = parseInt(key, 10);
@@ -1746,7 +1745,7 @@ function updateCmdBar() {
     return;
   }
 
-  // Live chat
+  // Live chat — 3 states: active (running), paused, ended
   input.disabled    = false;
   input.placeholder = 'Type to send or /command...';
   btnSend.disabled  = false;
@@ -1755,50 +1754,31 @@ function updateCmdBar() {
   btnMod.disabled   = false;
   btnStep.textContent = stepMode ? 'Step' : 'Live';
 
-  const state  = liveStatus.state || 'running';
+  const state    = liveStatus.state || 'active';
   const isPaused = state === 'paused';
+  // active = accepting messages + agents running; paused = loop paused
   btnPause.style.display  = isPaused ? 'none' : '';
   btnPause.disabled       = !moderatorMode;
   btnResume.style.display = isPaused ? '' : 'none';
   btnResume.disabled      = false;
-  const turn   = liveStatus.turn  || 0;
-  const chatData = _chatCache[activeChatId] || {};
-  const maxT   = liveStatus.max_turns || chatData.max_turns || 0;
-  const tok    = fmtTokens(liveStatus.total_tokens || 0);
-  const turnStr = maxT ? `${turn}/${maxT}` : String(turn);
 
+  const turn     = liveStatus.turn  || 0;
+  const chatData = _chatCache[activeChatId] || {};
+  const maxT     = liveStatus.max_turns || chatData.max_turns || 0;
+  const tok      = fmtTokens(liveStatus.total_tokens || 0);
+  const turnStr  = maxT ? `${turn}/${maxT}` : String(turn);
   const turnsBtn = `<button class="turns-add-btn" onclick="showTurnsMenu(event)" title="Add turns">+</button>`;
 
-  if (state === 'running') {
-    dot.className = 'cmd-state-dot running';
-    stateText.innerHTML = `Running &middot; Turn ${esc(turnStr)}${turnsBtn} &middot; ${esc(tok)} tokens`;
-  } else if (state === 'paused') {
+  if (state === 'paused') {
     dot.className = 'cmd-state-dot paused';
     stateText.innerHTML = `Paused &middot; Turn ${esc(turnStr)}${turnsBtn} &middot; ${esc(tok)} tokens`;
   } else if (state === 'ended') {
     dot.className = 'cmd-state-dot ended';
     stateText.innerHTML = `Ended &middot; ${esc(String(turn))} turns &middot; ${esc(tok)} tokens`;
-  } else if (state === 'waiting') {
-    dot.className = 'cmd-state-dot idle';
-    btnPause.style.display = 'none';
-    btnEnd.disabled = true;
-    btnStep.disabled = true;
-    btnMod.disabled = true;
-    const hasAgents = Object.keys((_chatCache[activeChatId] || {}).agents || {}).length > 0;
-    if (hasAgents) {
-      btnResume.style.display = '';
-      btnResume.disabled = false;
-      input.disabled = false;
-      stateText.innerHTML = `Ready &middot; ${esc(turnStr)}${turnsBtn} — press Start`;
-    } else {
-      btnResume.style.display = 'none';
-      input.disabled = true;
-      input.placeholder = 'Add agents to begin';
-      stateText.innerHTML = `Waiting for agents &middot; ${esc(turnStr)}${turnsBtn}`;
-    }
   } else {
-    dot.className = 'cmd-state-dot idle';
-    stateText.innerHTML = `${esc(state)} &middot; ${esc(tok)} tokens`;
+    // active / running — treat as equivalent
+    dot.className = 'cmd-state-dot running';
+    stateText.innerHTML = `Active &middot; Turn ${esc(turnStr)}${turnsBtn} &middot; ${esc(tok)} tokens`;
   }
 
   // Context meter: show max across all agents
@@ -1920,7 +1900,7 @@ async function selectChat(chatId) {
 
   // Seed per-chat state from API data for any live chat
   if (liveChats.has(chatId)) {
-    liveStatus.state     = chat.state || liveStatus.state || 'running';
+    liveStatus.state     = chat.state || liveStatus.state || 'active';
     liveStatus.max_turns = chat.max_turns || liveStatus.max_turns || 5;
     liveStatus.turn      = chat.turns ? chat.turns.length : (liveStatus.turn || 0);
   }
@@ -1966,7 +1946,7 @@ async function loadChatList() {
       activeLiveId = c.chat_id;
       // Seed per-chat state from list data (coarse; selectChat will refine)
       const cls = getLs(c.chat_id);
-      cls.state = c.state || 'paused';
+      cls.state = c.state || 'active';
       cls.turn = c.turn_count || 0;
       cls.max_turns = c.max_turns || cls.max_turns || 0;
       cls.total_tokens = c.total_tokens || 0;
@@ -2295,7 +2275,7 @@ function handleSSEvent(msg) {
 
     // Initialize per-chat state for the new chat
     _lsMap[chatId] = Object.assign(_defaultLS(), {
-      state: msg.state || 'running',
+      state: msg.state || 'active',
       max_turns: msg.max_turns || getLs(chatId).max_turns || 0,
       max_context: msg.max_context || 200000,
       permission_mode: msg.permission_mode || 'bypassPermissions',
